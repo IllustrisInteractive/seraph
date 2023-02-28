@@ -1,86 +1,62 @@
-import type { NextPage } from 'next'
-import Head from 'next/head'
-import Image from 'next/image'
+import type { NextPage } from "next";
+import Head from "next/head";
+import Image from "next/image";
+import { useAuthState, useSignInWithGoogle } from "react-firebase-hooks/auth";
+import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
+import { initializeApp } from "firebase/app";
+import { useEffect, useState } from "react";
+import SignInPage from "../components/home/SignInPage";
+import MainUX from "../components/home/MainUX";
+import { AnimatePresence } from "framer-motion";
 
 const Home: NextPage = () => {
+  const firebaseConfig = {
+    apiKey: "AIzaSyBRhKXktJuQPsWMtPp2Ep6r9BIfDgJ9Bp0",
+    authDomain: "seraph-f8751.firebaseapp.com",
+    projectId: "seraph-f8751",
+    storageBucket: "seraph-f8751.appspot.com",
+    messagingSenderId: "722676641961",
+    appId: "1:722676641961:web:736ab461fa9758663f79b8",
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const [signInWithGoogle, user_cred, loading, error] =
+    useSignInWithGoogle(auth);
+  const [signIn, showSignIn] = useState(false);
+  const [delay, setDelay] = useState(0);
+  const [user, user_loading, user_error] = useAuthState(auth);
+
+  useEffect(() => {
+    if (!user_loading) {
+      if (user) {
+        showSignIn(false);
+      } else {
+        showSignIn(true);
+      }
+    }
+  }, [user_loading]);
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center py-2">
-      <Head>
-        <title>Create Next App</title>
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
+    <>
+      <AnimatePresence mode="wait">
+        <>
+          {
+            // This component is displayed if the user is signed in.
+            user && <MainUX user={user} auth={auth} app={app} />
+          }
+          {signIn && (
+            <SignInPage
+              key="sign_in_ux"
+              signInWithGoogle={signInWithGoogle}
+              showSignIn={showSignIn}
+              loading={loading}
+              delay={delay}
+            />
+          )}
+        </>
+      </AnimatePresence>
+    </>
+  );
+};
 
-      <main className="flex w-full flex-1 flex-col items-center justify-center px-20 text-center">
-        <h1 className="text-6xl font-bold">
-          Welcome to{' '}
-          <a className="text-blue-600" href="https://nextjs.org">
-            Next.js!
-          </a>
-        </h1>
-
-        <p className="mt-3 text-2xl">
-          Get started by editing{' '}
-          <code className="rounded-md bg-gray-100 p-3 font-mono text-lg">
-            pages/index.tsx
-          </code>
-        </p>
-
-        <div className="mt-6 flex max-w-4xl flex-wrap items-center justify-around sm:w-full">
-          <a
-            href="https://nextjs.org/docs"
-            className="mt-6 w-96 rounded-xl border p-6 text-left hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Documentation &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Find in-depth information about Next.js features and its API.
-            </p>
-          </a>
-
-          <a
-            href="https://nextjs.org/learn"
-            className="mt-6 w-96 rounded-xl border p-6 text-left hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Learn &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Learn about Next.js in an interactive course with quizzes!
-            </p>
-          </a>
-
-          <a
-            href="https://github.com/vercel/next.js/tree/canary/examples"
-            className="mt-6 w-96 rounded-xl border p-6 text-left hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Examples &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Discover and deploy boilerplate example Next.js projects.
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/import?filter=next.js&utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className="mt-6 w-96 rounded-xl border p-6 text-left hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Deploy &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
-        </div>
-      </main>
-
-      <footer className="flex h-24 w-full items-center justify-center border-t">
-        <a
-          className="flex items-center justify-center gap-2"
-          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Powered by{' '}
-          <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-        </a>
-      </footer>
-    </div>
-  )
-}
-
-export default Home
+export default Home;
