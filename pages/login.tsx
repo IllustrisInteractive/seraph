@@ -4,26 +4,25 @@ import { ScriptProps } from "next/script";
 import { FunctionComponent, useEffect, useState } from "react";
 import { animate, AnimatePresence, easeInOut, motion } from "framer-motion";
 import { BeatLoader } from "react-spinners";
+import { AuthenticationManager } from "../core/firebase/Authentication";
+import { useRouter } from "next/router";
 
-interface SignInProps {
-  signInWithGoogle(): any;
-  showSignIn(state: boolean): any;
-  loading: any;
-  delay: number;
-}
-
-const SignInPage: FunctionComponent<SignInProps> = (props) => {
+const SignInPage: FunctionComponent = () => {
   const [email, setEmail] = useState(false);
   const [password, setPass] = useState(false);
   const [signingIn, setSigning] = useState(false);
 
+  const router = useRouter();
+
+  const authManager = new AuthenticationManager((user) => {
+    if (user) {
+      router.replace("/");
+    }
+  });
+
   useEffect(() => {
     document.title = "Log In | Seraph";
   }, []);
-
-  useEffect(() => {
-    if (!props.loading) setSigning(false);
-  }, [props.loading]);
 
   function handleEmail(e: any): void {
     if (
@@ -35,13 +34,14 @@ const SignInPage: FunctionComponent<SignInProps> = (props) => {
     else setEmail(false);
   }
 
-  function handleSignIn(email: boolean = false) {
-    try {
-      if (!email) props.signInWithGoogle();
-      setSigning(true);
-    } catch (error) {
+  function handleSignIn() {}
+
+  function handleSignInWithGoogle() {
+    setSigning(true);
+    authManager.authenticateUserWithGoogle((error) => {
       console.log(error);
-    }
+      setSigning(false);
+    });
   }
 
   function handlePassword(e: any): void {
@@ -53,7 +53,7 @@ const SignInPage: FunctionComponent<SignInProps> = (props) => {
       <motion.div
         className="grid grid-cols-2 h-screen"
         exit={{ opacity: 0, scale: 0.75 }}
-        transition={{ duration: props.delay, ease: easeInOut }}
+        transition={{ duration: 1, ease: easeInOut }}
       >
         <div className="bg-black" />
         <motion.div className="bg-white flex flex-col justify-center items-center">
@@ -91,7 +91,7 @@ const SignInPage: FunctionComponent<SignInProps> = (props) => {
                         ? "bg-blue-700 hover:scale-105 transition-transform"
                         : "bg-gray-400 pointer-events-none"
                     }`}
-                    onClick={() => handleSignIn(true)}
+                    onClick={() => handleSignIn()}
                   />
                   <div className="flex flex-row">
                     <a href="">Create an account</a>
@@ -105,7 +105,7 @@ const SignInPage: FunctionComponent<SignInProps> = (props) => {
                 </p>
                 <button
                   className="mb-4 bg-white rounded-lg drop-shadow-lg flex justify-center items-center h-12 w-1/2"
-                  onClick={() => handleSignIn()}
+                  onClick={() => handleSignInWithGoogle()}
                 >
                   <img className="h-full" src="/google_btn.svg" />
                   <p className="text-lg mr-4">Continue with Google</p>
@@ -134,7 +134,7 @@ const SignInPage: FunctionComponent<SignInProps> = (props) => {
           <motion.a
             className="cursor-pointer"
             onClick={() => {
-              props.showSignIn(false);
+              router.replace("/");
             }}
           >
             Return to Home Page
