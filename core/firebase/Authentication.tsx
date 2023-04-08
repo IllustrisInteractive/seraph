@@ -18,15 +18,26 @@ export class AuthenticationManager {
   private auth: Auth;
   private user: User | null;
   private onAuthStateChangedCallback: (user: User | null) => void;
-  constructor(onAuthStateChangedCallback: (user: User | null) => void) {
+  private onAuthStateErrorCallback: (error: Error) => void;
+  constructor(
+    onAuthStateChangedCallback: (user: User | null) => void,
+    onAuthStateErrorCallback: (error: Error) => void
+  ) {
     this.onAuthStateChangedCallback = onAuthStateChangedCallback;
+    this.onAuthStateErrorCallback = onAuthStateErrorCallback;
     this.auth = getAuth(app);
     this.user = null;
 
-    onAuthStateChanged(this.auth, (user) => {
-      this.user = user;
-      this.onAuthStateChangedCallback(user);
-    });
+    onAuthStateChanged(
+      this.auth,
+      (user) => {
+        this.user = user;
+        this.onAuthStateChangedCallback(user);
+      },
+      (error) => {
+        this.onAuthStateErrorCallback(error);
+      }
+    );
   }
 
   setUser(user: User | null) {

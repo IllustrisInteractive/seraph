@@ -6,6 +6,7 @@ import {
   getFirestore,
   getDocs,
   Firestore,
+  doc,
   query,
   Query as FirestoreQuery,
   collection,
@@ -14,9 +15,13 @@ import {
   where,
   QueryFieldFilterConstraint,
   Unsubscribe,
+  setDoc,
 } from "firebase/firestore";
 import { app } from "./FirebaseConfig";
 import Image from "next/image";
+import { UserModel } from "../model/User";
+import { Geopoint } from "geofire-common";
+import { getAuth } from "firebase/auth";
 /**
  * Singleton class that controls single/multiple User and Post queries from Cloud Firestore.
  */
@@ -74,6 +79,29 @@ export class FirestoreQueryController {
   public fetch_subscribe(query_class: Query): FirestoreSubscriptionController {
     return new FirestoreSubscriptionController(query_class, this.database);
   }
+
+  public uploadUserData(
+    user: UploadableUserData,
+    uid: string,
+    onSuccessCallback: () => void,
+    onFailureCallback: (error: Error) => void
+  ) {
+    setDoc(doc(this.database, "users/" + uid), user)
+      .then(() => {
+        onSuccessCallback();
+      })
+      .catch((error: Error) => {
+        onFailureCallback(error);
+      });
+  }
+}
+
+export interface UploadableUserData {
+  f_name: string;
+  l_name: string;
+  date_of_birth: Date;
+  default_location: Geopoint;
+  default_location_hash: any;
 }
 
 interface Query {
@@ -94,6 +122,16 @@ export class UserQuery implements Query {
     this.collection = collection;
     this.query = query;
     this.single = single;
+  }
+}
+
+export class PostQuery implements Query {
+  collection: string;
+  query: QueryFieldFilterConstraint[];
+
+  constructor(collection: string, ...query: QueryFieldFilterConstraint[]) {
+    this.collection = collection;
+    this.query = query;
   }
 }
 

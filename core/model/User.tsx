@@ -27,31 +27,49 @@ export class UserModel {
 
   private _profilePicture: ImageAsset | undefined = undefined;
   public get profilePicture(): ImageAsset | undefined {
-    if (!this._profilePicture) throw new Error("UserModel is not yet ready.");
+    if (!this._profilePicture) return undefined;
     else return this.profilePicture;
+  }
+
+  private _defaultLocation: [number, number] | undefined = undefined;
+  public get defaultLocation(): [number, number] | undefined {
+    if (!this._defaultLocation) return undefined;
+    else return this._defaultLocation;
   }
   private ready: boolean = false;
 
-  constructor(user: User, modelReturnFunction: (userModel: UserModel) => void) {
+  constructor(
+    user: User,
+    modelReturnFunction: (userModel: UserModel) => void,
+    modelErrorFunction: (error: Error) => void
+  ) {
     let firestoreController = new FirestoreQueryController();
     let query = new UserQuery("users", true, where("__name__", "==", user.uid));
     firestoreController.fetch_user_once(query).then((user_query) => {
-      let userDoc = user_query.getDocuments()[0];
-      this._fName = userDoc["f_name"];
-      this._lName = userDoc["l_name"];
-      this._dateOfBirth = new Date(userDoc["dateOfBirth"]);
-      this.ready = true;
-      let storageController = new StorageController();
-      if (userDoc["profile_picture"]) {
-        (async () => {
-          this._profilePicture = await storageController.downloadImageAsset(
-            userDoc["profile_picture"]
-          );
+      if (user_query.getDocuments().length > 0) {
+        let userDoc = user_query.getDocuments()[0];
+        this._fName = userDoc["f_name"];
+        this._lName = userDoc["l_name"];
+        this._dateOfBirth = new Date(userDoc["dateOfBirth"]);
+        this._defaultLocation = [
+          userDoc["default_location"]["lat"],
+          userDoc["default_location"]["lng"],
+        ];
+        this.ready = true;
+        let storageController = new StorageController();
+        if (userDoc["profile_picture"]) {
+          (async () => {
+            this._profilePicture = await storageController.downloadImageAsset(
+              userDoc["profile_picture"]
+            );
+            modelReturnFunction(this);
+          })();
+        } else {
+          this._profilePicture = new ImageAsset("default_picture.png");
           modelReturnFunction(this);
-        })();
+        }
       } else {
-        this._profilePicture = new ImageAsset("default_picture.png");
-        modelReturnFunction(this);
+        modelErrorFunction(new Error("No document"));
       }
     });
   }

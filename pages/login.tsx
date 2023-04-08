@@ -14,14 +14,18 @@ const SignInPage: FunctionComponent = () => {
 
   const router = useRouter();
 
-  const authManager = new AuthenticationManager((user) => {
-    if (user) {
-      router.replace("/");
-    }
-  });
+  let authManager: AuthenticationManager;
 
   useEffect(() => {
     document.title = "Log In | Seraph";
+    authManager = new AuthenticationManager(
+      (user) => {
+        if (user) {
+          router.replace("/");
+        }
+      },
+      () => {}
+    );
   }, []);
 
   function handleEmail(e: any): void {
