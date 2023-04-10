@@ -12,31 +12,33 @@ import MainUX from "../components/home/MainUX";
 const Home: NextPage = () => {
   const [user, setUser] = useState<UserModel>();
   const [ready, setReady] = useState(false);
+  const [authManager, setManager] = useState<AuthenticationManager>();
   const router = useRouter();
-  let authManager: AuthenticationManager;
 
   useEffect(() => {
     setReady(true);
-    authManager = new AuthenticationManager(
-      (fetchedUser) => {
-        if (fetchedUser && !user) {
-          let model = new UserModel(
-            fetchedUser,
-            (userModel) => {
-              console.log(userModel);
-              setUser(userModel);
-            },
-            (error) => {
-              router.replace("/new_user");
-            }
-          );
-        } else if (!fetchedUser && ready) {
-          router.replace("/login");
+    setManager(
+      new AuthenticationManager(
+        (fetchedUser) => {
+          if (fetchedUser && !user) {
+            let model = new UserModel(
+              fetchedUser,
+              (userModel) => {
+                console.log(userModel);
+                setUser(userModel);
+              },
+              (error) => {
+                router.replace("/new_user");
+              }
+            );
+          } else if (!fetchedUser) {
+            router.replace("/login");
+          }
+        },
+        (error) => {
+          console.log(error);
         }
-      },
-      (error) => {
-        console.log(error);
-      }
+      )
     );
   }, []);
   return (
@@ -47,14 +49,7 @@ const Home: NextPage = () => {
       <AnimatePresence mode="wait">
         {!user && <LoadingElement />}
       </AnimatePresence>
-      {user && <MainUX user={user} />}
-      <button
-        onClick={() => {
-          authManager.signOut();
-        }}
-      >
-        Sign Out
-      </button>
+      {user && <MainUX user={user} authManager={authManager} />}
     </div>
   );
 };

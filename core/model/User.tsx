@@ -31,18 +31,23 @@ export class UserModel {
     else return this.profilePicture;
   }
 
-  private _defaultLocation: [number, number] | undefined = undefined;
-  public get defaultLocation(): [number, number] | undefined {
-    if (!this._defaultLocation) return undefined;
-    else return this._defaultLocation;
+  private _defaultLocation: [number, number];
+  public get defaultLocation(): [number, number] {
+    return this._defaultLocation;
   }
   private ready: boolean = false;
+
+  private _phoneNumber: string | undefined = undefined;
+  public get phoneNumber() {
+    return this._phoneNumber;
+  }
 
   constructor(
     user: User,
     modelReturnFunction: (userModel: UserModel) => void,
     modelErrorFunction: (error: Error) => void
   ) {
+    this._defaultLocation = [0, 0];
     let firestoreController = new FirestoreQueryController();
     let query = new UserQuery("users", true, where("__name__", "==", user.uid));
     firestoreController.fetch_user_once(query).then((user_query) => {
@@ -52,10 +57,11 @@ export class UserModel {
         this._lName = userDoc["l_name"];
         this._dateOfBirth = new Date(userDoc["dateOfBirth"]);
         this._defaultLocation = [
-          userDoc["default_location"]["lat"],
-          userDoc["default_location"]["lng"],
+          userDoc["default_location"]["_lat"],
+          userDoc["default_location"]["_long"],
         ];
         this.ready = true;
+        this._phoneNumber = userDoc["phone_number"];
         let storageController = new StorageController();
         if (userDoc["profile_picture"]) {
           (async () => {
@@ -78,5 +84,9 @@ export class UserModel {
     if (this._fName && this._lName) {
       return this._fName + " " + this._lName;
     }
+  }
+
+  getCoordinates(): [number, number] {
+    return this._defaultLocation;
   }
 }
