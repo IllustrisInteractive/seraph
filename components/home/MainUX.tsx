@@ -1,6 +1,6 @@
-import { FunctionComponent, useEffect, useState } from "react";
+import { FunctionComponent, useCallback, useEffect, useState } from "react";
 import { UserModel } from "../../core/model/User";
-import { easeInOut, motion } from "framer-motion";
+import { AnimatePresence, easeInOut, motion } from "framer-motion";
 import { Geocoder } from "../../core/maps/geocoding";
 import { NextRouter, useRouter } from "next/router";
 import {
@@ -9,6 +9,7 @@ import {
   PostQuery,
 } from "../../core/firebase/Firestore";
 import { AuthenticationManager } from "../../core/firebase/Authentication";
+import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
 
 interface props {
   authManager: AuthenticationManager | undefined;
@@ -16,6 +17,7 @@ interface props {
 }
 
 export const MainUX: FunctionComponent<props> = (props) => {
+  const [newPostModal, setNewPostModal] = useState(false);
   const [coordinates, setCoordinates] = useState<[number, number]>();
   const [defaultLocation, setDefault] = useState(false);
   const [ready, setReady] = useState(false);
@@ -26,10 +28,42 @@ export const MainUX: FunctionComponent<props> = (props) => {
   let queryController: FirestoreQueryController;
   let router = useRouter();
 
+  const { isLoaded } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: "AIzaSyA9cJAWTnuOvfK3w_S22YKTkgVYTTbhfzw",
+  });
+
+  const [map, setMap] = useState(null);
+
+  const center = coordinates
+    ? {
+        lat: coordinates[0],
+        lng: coordinates[1],
+      }
+    : { lat: 0, lng: 0 };
+
+  const onLoad = useCallback(function callback(map: any) {
+    // This is just an example of getting and using the map instance!!! don't just blindly copy!
+    const bounds = new window.google.maps.LatLngBounds(center);
+    map.fitBounds(bounds);
+
+    setMap(map);
+  }, []);
+
+  const onUnmount = useCallback(function callback(map: any) {
+    setMap(null);
+  }, []);
+
   const userPopup = () => {
     return (
-      <div className="flex flex-col absolute top-8 right-0 bg-white w-56 shadow-lg rounded-lg overflow-hidden">
-        <div className="bg-gray-400 w-full w-64 h-20 max-h-24 items-center space-x-2 flex flex-row">
+      <motion.div
+        initial={{ y: "-10vh", opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: "-10vh", opacity: 0 }}
+        transition={{ duration: 0.5, ease: "easeInOut" }}
+        className="flex flex-col absolute top-8 right-0 bg-white w-56 shadow-lg rounded-lg overflow-hidden"
+      >
+        <div className="bg-gray-400 w-full h-20 max-h-24 items-center space-x-2 flex flex-row">
           <div className="bg-black h-full w-1/3">
             {/** Profile picture placeholder */}
           </div>
@@ -66,7 +100,186 @@ export const MainUX: FunctionComponent<props> = (props) => {
             <p>Sign out</p>
           </button>
         </div>
-      </div>
+      </motion.div>
+    );
+  };
+
+  const NewPostModal = () => {
+    const [category, setCategory] = useState<
+      "accident" | "incident" | "hazard" | "crime" | undefined
+    >();
+
+    useEffect(() => {}, [category]);
+
+    const CategoryTag = (props: any) => {
+      if (props.category == "incident")
+        return (
+          <motion.div
+            layoutId={category}
+            className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-orange-400 text-white items-center space-x-2"
+          >
+            <p>Incident</p>
+            <button
+              className="text-orange-400 rounded-full bg-white h-4 w-4 flex justify-center items-center"
+              onClick={() => {
+                setCategory(undefined);
+              }}
+            >
+              x
+            </button>
+          </motion.div>
+        );
+      if (props.category == "accident")
+        return (
+          <motion.div
+            layoutId={category}
+            className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-orange-400 text-white items-center space-x-2"
+          >
+            <p>Accident</p>
+            <button
+              className="text-orange-400 rounded-full bg-white h-4 w-4 flex justify-center items-center"
+              onClick={() => {
+                setCategory(undefined);
+              }}
+            >
+              x
+            </button>
+          </motion.div>
+        );
+      if (props.category == "crime")
+        return (
+          <motion.div
+            layoutId={category}
+            className="flex flex-row text-sm font-bold items-center px-4 py-1 space-x-2 w-fit rounded-full bg-red-600 text-white"
+          >
+            <p>Crime</p>
+            <button
+              className="text-red-600 rounded-full bg-white h-4 w-4 flex justify-center items-center"
+              onClick={() => {
+                setCategory(undefined);
+              }}
+            >
+              x
+            </button>
+          </motion.div>
+        );
+      if (props.category == "hazard")
+        return (
+          <motion.div
+            layoutId={category}
+            className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-orange-400 text-white items-center space-x-2"
+          >
+            <p>Hazard</p>
+            <button
+              className="text-orange-400 rounded-full bg-white h-4 w-4 flex justify-center items-center"
+              onClick={() => {
+                setCategory(undefined);
+              }}
+            >
+              x
+            </button>
+          </motion.div>
+        );
+      return null;
+    };
+    return (
+      <motion.div className="h-screen w-screen fixed flex flex-col justify-center items-center z-50">
+        <motion.div
+          className="bg-white rounded-lg flex flex-col shadow-lg w-1/2 z-50"
+          layoutId="newPostModal"
+          layout="position"
+        >
+          <motion.div className="relative flex flex-row justify-center items-center w-full">
+            <p className="text-xl font-bold text-center py-4">Create Report</p>
+            <button
+              onClick={() => {
+                setNewPostModal(!newPostModal);
+              }}
+              className="h-8 w-8 absolute right-8 rounded-full bg-gray-400"
+            >
+              x
+            </button>
+          </motion.div>
+          <motion.div
+            className="text-lg bg-gray-200 flex p-4 font-bold h-32 flex-col"
+            layout
+            layoutId={category}
+          >
+            {category && <CategoryTag category={category} />}
+            <input
+              placeholder="Give your report a title"
+              className="bg-transparent outline-none"
+            />
+            <p className="font-normal text-md">
+              Write some details about your report
+            </p>
+            <AnimatePresence>
+              {!category && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.5, ease: "easeInOut" }}
+                  className="text-black flex flex-row space-x-4 bg-gray-200 w-full justify-center px-4"
+                >
+                  <motion.button
+                    className="px-4 py-2 rounded-lg bg-white shadow-lg grow"
+                    layoutId="incident"
+                    onClick={() => {
+                      setCategory("incident");
+                    }}
+                  >
+                    Incident
+                  </motion.button>
+                  <motion.button
+                    className="px-4 py-2 rounded-lg bg-white shadow-lg grow"
+                    layoutId="accident"
+                    onClick={() => {
+                      setCategory("accident");
+                    }}
+                  >
+                    Accident
+                  </motion.button>
+                  <motion.button
+                    className="px-4 py-2 rounded-lg bg-white shadow-lg grow"
+                    layoutId="hazard"
+                    onClick={() => {
+                      setCategory("hazard");
+                    }}
+                  >
+                    Hazard
+                  </motion.button>
+                  <motion.button
+                    className="px-4 py-2 rounded-lg bg-white shadow-lg grow"
+                    layoutId="crime"
+                    onClick={() => {
+                      setCategory("crime");
+                    }}
+                  >
+                    Crime
+                  </motion.button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+
+          <button
+            onClick={() => {
+              setNewPostModal(!newPostModal);
+            }}
+            className="px-4 py-2 rounded-lg shadow-lg bg-white mx-4 my-2 z-30"
+          >
+            Publish Post
+          </button>
+        </motion.div>
+        <motion.div
+          className="h-full w-full fixed bg-black"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.2 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.5, ease: "easeInOut" }}
+        ></motion.div>
+      </motion.div>
     );
   };
 
@@ -121,9 +334,11 @@ export const MainUX: FunctionComponent<props> = (props) => {
       exit={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       key="main_ux"
+      layout="position"
     >
+      <AnimatePresence>{newPostModal && <NewPostModal />}</AnimatePresence>
       <motion.div
-        className="px-16 py-4 bg-gray-100 grid grid-cols-6 items-center gap-x-4 z-50"
+        className="px-16 py-4 bg-gray-100 grid grid-cols-6 items-center gap-x-4 z-40"
         initial={{ y: "-5vh", opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: "easeInOut" }}
@@ -141,7 +356,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
             }}
           >
             {props.user.getFullName()}
-            {userPopupState && userPopup()}
+            <AnimatePresence>{userPopupState && userPopup()}</AnimatePresence>
           </div>
         </div>
       </motion.div>
@@ -176,7 +391,18 @@ export const MainUX: FunctionComponent<props> = (props) => {
             </button>
           </div>
         </motion.div>
-        <div className="col-span-3 flex flex-col">
+        <div className="col-span-3 flex flex-col space-y-4">
+          {/**Main feed */}
+          <motion.button
+            className="bg-white rounded-lg p-4 shadow-lg"
+            onClick={() => {
+              setNewPostModal(!newPostModal);
+            }}
+            layoutId="newPostModal"
+            layout="position"
+          >
+            Create Report
+          </motion.button>
           <div className="bg-white rounded-lg shadow-lg p-4 flex flex-col overflow-hidden">
             <div className="flex flex-row space-x-2">
               {" "}
@@ -223,6 +449,18 @@ export const MainUX: FunctionComponent<props> = (props) => {
         </div>
         <div className="col-span-2">
           <div className="h-1/2 w-full rounded-lg bg-white relative overflow-hidden shadow-inner z-20">
+            {isLoaded && (
+              <GoogleMap
+                mapContainerClassName="h-full w-full"
+                center={center}
+                zoom={10}
+                onLoad={onLoad}
+                onUnmount={onUnmount}
+              >
+                {/* Child components, such as markers, info windows, etc. */}
+                <></>
+              </GoogleMap>
+            )}
             <div className="absolute bottom-0 bg-gradient-to-t from-gray-700 to-transparent h-1/6 p-4 text-white font-light w-full">
               There are <span className="font-bold">0</span> reports in your
               area

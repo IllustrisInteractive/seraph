@@ -14,6 +14,7 @@ const Home: NextPage = () => {
   const [ready, setReady] = useState(false);
   const [authManager, setManager] = useState<AuthenticationManager>();
   const router = useRouter();
+  const [slowLoading, setSlowLoadingWarning] = useState(false);
 
   useEffect(() => {
     setReady(true);
@@ -40,9 +41,14 @@ const Home: NextPage = () => {
         }
       )
     );
+
+    const timer = setTimeout(() => {
+      setSlowLoadingWarning(true);
+    }, 5000);
+    return () => clearTimeout(timer);
   }, []);
   return (
-    <div className="h-screen w-screen">
+    <div className="h-screen w-screen flex flex-col items-center">
       <Head>
         <title>SERAPH - Keeping you safe</title>
       </Head>
@@ -50,6 +56,17 @@ const Home: NextPage = () => {
         {!user && <LoadingElement />}
       </AnimatePresence>
       {user && <MainUX user={user} authManager={authManager} />}
+      {slowLoading && !user && (
+        <motion.div
+          className="shadow-lg rounded-lg p-4 absolute bottom-8 text-center text-sm font-bold bg-red-600 w-1/3 text-white justify-self-center"
+          initial={{ y: "10vh" }}
+          animate={{ y: 0 }}
+          transition={{ duration: 0.25, ease: "easeInOut" }}
+        >
+          SERAPH is taking longer than usual to load. Don't worry, we're still
+          trying, but check your Internet connection if it's spotty.
+        </motion.div>
+      )}
     </div>
   );
 };
