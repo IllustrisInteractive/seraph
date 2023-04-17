@@ -156,6 +156,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
         },
         () => {}
       );
+      props.user.setCurrentLocation(coordinates);
     }
   }, [coordinates]);
   return (
@@ -169,7 +170,9 @@ export const MainUX: FunctionComponent<props> = (props) => {
       layout="position"
     >
       <AnimatePresence>
-        {newPostModal && <NewPostModal toggleModal={toggleModal} />}
+        {newPostModal && (
+          <NewPostModal toggleModal={toggleModal} user={props.user} />
+        )}
       </AnimatePresence>
       <motion.div
         className="px-16 py-4 bg-gray-100 grid grid-cols-6 items-center gap-x-4 z-40"

@@ -42,11 +42,22 @@ export class UserModel {
     return this._phoneNumber;
   }
 
+  private _currentLocation: [number, number];
+  public get currentLocation(): [number, number] {
+    return this._currentLocation;
+  }
+
+  private _authUser: User | undefined;
+  public get authUser(): User | undefined {
+    return this._authUser;
+  }
+
   constructor(
     user: User,
     modelReturnFunction: (userModel: UserModel) => void,
     modelErrorFunction: (error: Error) => void
   ) {
+    this._currentLocation = [0, 0];
     this._defaultLocation = [0, 0];
     let firestoreController = new FirestoreQueryController();
     let query = new UserQuery("users", true, where("__name__", "==", user.uid));
@@ -62,6 +73,7 @@ export class UserModel {
         ];
         this.ready = true;
         this._phoneNumber = userDoc["phone_number"];
+        this._authUser = user;
         let storageController = new StorageController();
         if (userDoc["profile_picture"]) {
           (async () => {
@@ -88,5 +100,9 @@ export class UserModel {
 
   getCoordinates(): [number, number] {
     return this._defaultLocation;
+  }
+
+  setCurrentLocation(location: [number, number]) {
+    this._currentLocation = location;
   }
 }

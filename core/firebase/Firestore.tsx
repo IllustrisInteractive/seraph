@@ -16,12 +16,14 @@ import {
   QueryFieldFilterConstraint,
   Unsubscribe,
   setDoc,
+  addDoc,
+  GeoPoint,
 } from "firebase/firestore";
 import { app } from "./FirebaseConfig";
 import Image from "next/image";
 import { UserModel } from "../model/User";
-import { Geopoint } from "geofire-common";
-import { getAuth } from "firebase/auth";
+import { Geopoint, geohashForLocation } from "geofire-common";
+import { User, getAuth } from "firebase/auth";
 /**
  * Singleton class that controls single/multiple User and Post queries from Cloud Firestore.
  */
@@ -94,6 +96,31 @@ export class FirestoreQueryController {
         onFailureCallback(error);
       });
   }
+
+  public async uploadReport(
+    report: Report,
+    user: User,
+    onFinishCallback: Function,
+    files?: FileList
+  ) {
+    let reportToUpload: any = report;
+    reportToUpload["owner_uid"] = user.uid;
+    reportToUpload["location_hash"] = geohashForLocation([
+      report.location.latitude,
+      report.location.longitude,
+    ]);
+    addDoc(collection(this.database, "posts"), reportToUpload).then((ref) => {
+      onFinishCallback();
+    });
+  }
+}
+
+export interface Report {
+  title: string;
+  content: string;
+  category: string;
+  location: GeoPoint;
+  timestamp: number;
 }
 
 export interface UploadableUserData {

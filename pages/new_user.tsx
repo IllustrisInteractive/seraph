@@ -18,7 +18,7 @@ const NewUser: NextPage = () => {
   const [showLocationOptions, setLocationOptions] = useState(true);
   const [location, setLocation] = useState<string>("");
   const [num, setNum] = useState(0);
-  const [coordinates, setCoordinates] = useState([0, 0]);
+  const [coordinates, setCoordinates] = useState<[number, number]>([0, 0]);
   const [user, setUser] = useState<User | null>();
   const [showCityState, setCityState] = useState(false);
   const [useGPS, setUseGPS] = useState(false);

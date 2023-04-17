@@ -1,13 +1,61 @@
 import { useState, useRef, useEffect, FunctionComponent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import TextareaAutosize from "react-textarea-autosize";
+import { UserModel } from "../../../core/model/User";
+import { ClipLoader } from "react-spinners";
+import {
+  FirestoreQueryController,
+  Report,
+} from "../../../core/firebase/Firestore";
+import { GeoPoint } from "firebase/firestore";
 
-const NewPostModal = (props: any) => {
+interface NewPostModalProps {
+  toggleModal: Function;
+  user: UserModel;
+}
+
+const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
   const [category, setCategory] = useState<
     "accident" | "incident" | "hazard" | "crime" | undefined
   >();
   const [postVerified, setPostVerified] = useState(false);
   const [filesSelected, setFiles] = useState<File[]>();
   const fileInput = useRef<HTMLInputElement>(null);
+  const reportTitleRef = useRef<HTMLInputElement>(null);
+  const reportContentRef = useRef<any>();
+  const [loading, setLoading] = useState(false);
+
+  const removeMedia = (idx: number) => {
+    if (filesSelected) {
+      let filesSelectedCopy = [...filesSelected];
+      filesSelectedCopy.splice(idx, 1);
+
+      if (filesSelectedCopy.length == 0) setFiles(undefined);
+      else setFiles(filesSelectedCopy);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (category && reportTitleRef.current?.value) {
+      setLoading(true);
+      let reportToUpload: Report = {
+        title: reportTitleRef.current?.value,
+        content: reportContentRef.current.value,
+        category: category,
+        location: new GeoPoint(
+          props.user.currentLocation[0],
+          props.user.currentLocation[1]
+        ),
+        timestamp: Date.now(),
+      };
+
+      let controller: FirestoreQueryController = new FirestoreQueryController();
+
+      controller.uploadReport(reportToUpload, props.user.authUser!, () => {
+        props.toggleModal();
+      });
+    }
+  };
 
   const handleFileInput = (e: any) => {
     if (filesSelected && filesSelected?.length + e.target.files.length <= 5) {
@@ -34,6 +82,7 @@ const NewPostModal = (props: any) => {
 
   interface MediaContentProps {
     file: File;
+    index: number;
   }
 
   const MediaContent: FunctionComponent<MediaContentProps> = (props) => {
@@ -45,12 +94,20 @@ const NewPostModal = (props: any) => {
       );
     } else {
       return (
-        <motion.div className="h-36 overflow-hidden rounded-lg py-2 relative flex justify-center items-center group">
+        <motion.div
+          key={props.index}
+          className="h-36 overflow-hidden rounded-lg py-2 relative flex justify-center items-center group"
+        >
           <img
             src={URL.createObjectURL(props.file)}
-            className="object-cover rounded-lg"
+            className="object-cover h-full rounded-lg"
           />
-          <button className="group-hover:block absolute text-white hidden z-50">
+          <button
+            onClick={() => {
+              removeMedia(props.index);
+            }}
+            className="group-hover:block absolute text-white hidden z-50"
+          >
             Remove
           </button>
           <div className="bg-transparent opacity-20 group-hover:bg-black absolute h-full w-full z-40"></div>
@@ -63,6 +120,7 @@ const NewPostModal = (props: any) => {
     if (props.category == "incident")
       return (
         <motion.div
+          layout="position"
           layoutId={category}
           className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-orange-400 text-white items-center space-x-2"
         >
@@ -80,6 +138,7 @@ const NewPostModal = (props: any) => {
     if (props.category == "accident")
       return (
         <motion.div
+          layout="position"
           layoutId={category}
           className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-orange-400 text-white items-center space-x-2"
         >
@@ -97,6 +156,7 @@ const NewPostModal = (props: any) => {
     if (props.category == "crime")
       return (
         <motion.div
+          layout="position"
           layoutId={category}
           className="flex flex-row text-sm font-bold items-center px-4 py-1 space-x-2 w-fit rounded-full bg-red-600 text-white"
         >
@@ -114,6 +174,7 @@ const NewPostModal = (props: any) => {
     if (props.category == "hazard")
       return (
         <motion.div
+          layout="position"
           layoutId={category}
           className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-orange-400 text-white items-center space-x-2"
         >
@@ -133,10 +194,16 @@ const NewPostModal = (props: any) => {
   return (
     <motion.div className="h-screen w-screen fixed flex flex-col justify-center items-center z-50">
       <motion.div
-        className="bg-white rounded-xl flex flex-col shadow-lg w-1/2 z-50"
+        className="bg-white rounded-xl relative flex flex-col shadow-lg w-1/2 z-50"
         layoutId="newPostModal"
         layout="position"
       >
+        {loading && (
+          <motion.div className="h-full w-full absolute rounded-xl space-y-2 flex flex-col justify-center items-center text-white bg-black bg-opacity-40">
+            <ClipLoader color="white" />
+            <p className="text-xl font-bold">Uploading your report</p>
+          </motion.div>
+        )}
         <motion.div className="relative flex flex-row justify-center items-center w-full">
           <p className="text-xl font-bold text-center py-4">Create Report</p>
           <button
@@ -159,10 +226,14 @@ const NewPostModal = (props: any) => {
           <motion.div className="flex flex-row">
             <motion.div className="flex flex-col grow">
               <input
+                ref={reportTitleRef}
                 placeholder="Give your report a title"
                 className="bg-transparent outline-none"
               />
-              <input
+
+              <TextareaAutosize
+                ref={reportContentRef}
+                maxRows={8}
                 placeholder="Write some details about your report"
                 className="mb-8 bg-transparent outline-none font-normal"
               />
@@ -190,6 +261,13 @@ const NewPostModal = (props: any) => {
                 </motion.button>
               )}
             </motion.div>
+          </motion.div>
+          <motion.div className="flex flex-col mb-4">
+            <p className="text-sm">Location Data</p>
+            <p className="font-normal">
+              Lat: {props.user.currentLocation[0]}, Lat:{" "}
+              {props.user.currentLocation[1]}
+            </p>
           </motion.div>
           <AnimatePresence>
             {!category && (
@@ -245,8 +323,8 @@ const NewPostModal = (props: any) => {
               layoutId="files"
               className="grid grid-cols-5 mt-4 gap-x-2"
             >
-              {Array.from(filesSelected).map((file: File) => {
-                return <MediaContent file={file} />;
+              {Array.from(filesSelected).map((file: File, idx: number) => {
+                return <MediaContent file={file} index={idx} />;
               })}
               {filesSelected.length < 5 && (
                 <motion.button
@@ -274,7 +352,7 @@ const NewPostModal = (props: any) => {
 
         <button
           onClick={() => {
-            props.toggleModal();
+            handleSubmit();
           }}
           className={`mx-8 my-4 py-2 rounded-lg drop-shadow-lg font-bold text-white mx-4 my-2 z-30 transition ${
             postVerified ? "bg-blue-400" : "bg-gray-400 pointer-events-none"

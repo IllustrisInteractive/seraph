@@ -19,6 +19,7 @@
     "react-firebase-hooks": "^5.1.1",
     "react-icons": "^4.7.1",
     "react-spinners": "^0.13.8",
+    "react-textarea-autosize": "^8.4.1",
     "twilio": "^4.7.2"
   },
   "devDependencies": {
