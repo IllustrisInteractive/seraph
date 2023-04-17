@@ -17,6 +17,20 @@ import {
 import { AuthenticationManager } from "../../core/firebase/Authentication";
 import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
 import NewPostModal from "./MainUX/NewPostModal";
+import { distanceBetween, geohashQueryBounds } from "geofire-common";
+import {
+  DocumentReference,
+  collection,
+  doc,
+  endAt,
+  getDoc,
+  getDocs,
+  getFirestore,
+  orderBy,
+  query,
+  startAt,
+} from "firebase/firestore";
+import { CircleLoader } from "react-spinners";
 
 interface props {
   authManager: AuthenticationManager | undefined;
@@ -240,49 +254,11 @@ export const MainUX: FunctionComponent<props> = (props) => {
           >
             Create Report
           </motion.button>
-          <div className="bg-white rounded-lg shadow-lg p-4 flex flex-col overflow-hidden">
-            <div className="flex flex-row space-x-2">
-              {" "}
-              {/** Post component header */}
-              <div className="h-9 w-9 rounded-full bg-black">
-                {/** Profile picture placeholder */}
-              </div>
-              <div className="flex flex-col h-9 grow">
-                <p className="font-bold text-sm">Test Account</p>
-                <p className="font-bold text-gray-400 text-xs">
-                  2h - 0.3km away
-                </p>
-              </div>
-              <div className="flex flex-row space-x-4 items-center">
-                <div className="flex flex-row space-x-2 items-center font-bold text-green-500">
-                  ^ <p>0</p>
-                </div>
-                <div className="flex flex-row space-x-2 items-center font-bold text-red-500">
-                  ^ <p>0</p>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-col mt-4">
-              <div className="px-2 py-1 rounded-full font-bold text-xs text-center text-white bg-orange-400 w-fit">
-                Hazard
-              </div>
-              <p className="font-bold text-xl">
-                Heavy construction work along Nia Rd., Carsadang Bago.
-              </p>
-              <p className="leading-tight mt-2">
-                Caption here. Lorem ipsum dolor sit amet, consectetur adipiscing
-                elit. Praesent placerat metus ac consequat elementum. Aenean
-                tincidunt ut elit vitae porttitor. Nulla quam nulla, gravida nec
-                velit non, tristique ornare diam.
-              </p>
-            </div>
-            <div className="bg-gradient-to-r from-transparent via-gray-300 to-transparent h-[1px] mt-2" />
-            <div className="grid grid-cols-3 h-12 -mb-4 -ml-4 -mr-4">
-              <button className="hover:bg-gray-200 font-bold">Upvote</button>
-              <button className="hover:bg-gray-200 font-bold">Downvote</button>
-              <button className="hover:bg-gray-200 font-bold">Comments</button>
-            </div>
-          </div>
+          {coordinates && (
+            <>
+              <FeedManager coordinates={coordinates} />
+            </>
+          )}
         </div>
         <div className="col-span-2">
           <div className="h-1/2 w-full rounded-lg bg-white relative overflow-hidden shadow-inner z-20">
@@ -309,4 +285,162 @@ export const MainUX: FunctionComponent<props> = (props) => {
   );
 };
 
+const FeedManager = (props: any) => {
+  const [posts, setPosts] = useState<any[]>();
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (props.coordinates) {
+      setLoading(true);
+      const bounds = geohashQueryBounds(props.coordinates, 50 * 1000);
+      const promises = [];
+      for (const b of bounds) {
+        const q = query(
+          collection(getFirestore(), "posts"),
+          orderBy("location_hash"),
+          startAt(b[0]),
+          endAt(b[1])
+        );
+
+        promises.push(getDocs(q));
+      }
+
+      Promise.all(promises)
+        .then((snapshots) => {
+          const matchingDocs: any[] = [];
+
+          for (const snap of snapshots) {
+            for (const document of snap.docs) {
+              const lat = document.data()["location"]["_lat"];
+              const lng = document.data()["location"]["_long"];
+
+              // We have to filter out a few false positives due to GeoHash
+              // accuracy, but most will match
+              const distanceInKm = distanceBetween(
+                [lat, lng],
+                props.coordinates
+              );
+              const distanceInM = distanceInKm * 1000;
+              if (distanceInM <= 50 * 1000) {
+                let data = document.data();
+                let owner = getDoc(
+                  doc(getFirestore(), "users", data["owner_uid"])
+                );
+                data["owner"] = owner;
+                data["distance"] = distanceInM;
+                matchingDocs.push(data);
+              }
+            }
+          }
+
+          return matchingDocs;
+        })
+        .then((matchingDocs) => {
+          setLoading(false);
+          setPosts(matchingDocs);
+        });
+    }
+  }, [props.coordinates]);
+
+  return (
+    <motion.div className="w-full flex flex-col items-center">
+      {loading && (
+        <>
+          <CircleLoader className="mb-4" /> <p>Now loading your feed</p>
+        </>
+      )}
+      {!loading &&
+        posts &&
+        posts.map((postData: any) => {
+          return <Post data={postData} />;
+        })}
+    </motion.div>
+  );
+};
+
+const Post = (props: any) => {
+  useEffect(() => {
+    console.log(props.data);
+  }, []);
+  return (
+    <div className="bg-white w-full rounded-lg shadow-lg p-4 mb-4 flex flex-col overflow-hidden">
+      <div className="flex flex-row space-x-2">
+        {" "}
+        {/** Post component header */}
+        <div className="h-9 w-9 rounded-full bg-black">
+          {/** Profile picture placeholder */}
+        </div>
+        <div className="flex flex-col h-9 grow">
+          <p className="font-bold text-sm">Test Account</p>
+          <p className="font-bold text-gray-400 text-xs">
+            2h - {props.data.distance / 1000} km away
+          </p>
+        </div>
+        <div className="flex flex-row space-x-4 items-center">
+          <div className="flex flex-row space-x-2 items-center font-bold text-green-500">
+            ^ <p>0</p>
+          </div>
+          <div className="flex flex-row space-x-2 items-center font-bold text-red-500">
+            ^ <p>0</p>
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-col mt-4">
+        <div className="px-2 py-1 rounded-full font-bold text-xs text-center text-white bg-orange-400 w-fit">
+          Hazard
+        </div>
+        <p className="font-bold text-xl">{props.data.title}</p>
+        <p className="leading-tight mt-2 grow">{props.data.content}</p>
+      </div>
+      <div className="bg-gradient-to-r from-transparent via-gray-300 to-transparent h-[1px] mt-2" />
+      <div className="grid grid-cols-3 h-12 -mb-4 -ml-4 -mr-4">
+        <button className="hover:bg-gray-200 font-bold">Upvote</button>
+        <button className="hover:bg-gray-200 font-bold">Downvote</button>
+        <button className="hover:bg-gray-200 font-bold">Comments</button>
+      </div>
+    </div>
+  );
+};
+
 export default MainUX;
+
+<div className="bg-white rounded-lg shadow-lg p-4 flex flex-col overflow-hidden">
+  <div className="flex flex-row space-x-2">
+    {" "}
+    {/** Post component header */}
+    <div className="h-9 w-9 rounded-full bg-black">
+      {/** Profile picture placeholder */}
+    </div>
+    <div className="flex flex-col h-9 grow">
+      <p className="font-bold text-sm">Test Account</p>
+      <p className="font-bold text-gray-400 text-xs">2h - 0.3km away</p>
+    </div>
+    <div className="flex flex-row space-x-4 items-center">
+      <div className="flex flex-row space-x-2 items-center font-bold text-green-500">
+        ^ <p>0</p>
+      </div>
+      <div className="flex flex-row space-x-2 items-center font-bold text-red-500">
+        ^ <p>0</p>
+      </div>
+    </div>
+  </div>
+  <div className="flex flex-col mt-4">
+    <div className="px-2 py-1 rounded-full font-bold text-xs text-center text-white bg-orange-400 w-fit">
+      Hazard
+    </div>
+    <p className="font-bold text-xl">
+      Heavy construction work along Nia Rd., Carsadang Bago.
+    </p>
+    <p className="leading-tight mt-2">
+      Caption here. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+      Praesent placerat metus ac consequat elementum. Aenean tincidunt ut elit
+      vitae porttitor. Nulla quam nulla, gravida nec velit non, tristique ornare
+      diam.
+    </p>
+  </div>
+  <div className="bg-gradient-to-r from-transparent via-gray-300 to-transparent h-[1px] mt-2" />
+  <div className="grid grid-cols-3 h-12 -mb-4 -ml-4 -mr-4">
+    <button className="hover:bg-gray-200 font-bold">Upvote</button>
+    <button className="hover:bg-gray-200 font-bold">Downvote</button>
+    <button className="hover:bg-gray-200 font-bold">Comments</button>
+  </div>
+</div>;
