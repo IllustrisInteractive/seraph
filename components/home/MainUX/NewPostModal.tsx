@@ -47,13 +47,19 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
           props.user.currentLocation[1]
         ),
         timestamp: Date.now(),
+        media: filesSelected ? true : false,
       };
 
       let controller: FirestoreQueryController = new FirestoreQueryController();
 
-      controller.uploadReport(reportToUpload, props.user.authUser!, () => {
-        props.toggleModal();
-      });
+      controller.uploadReport(
+        reportToUpload,
+        props.user.authUser!,
+        () => {
+          props.toggleModal();
+        },
+        filesSelected
+      );
     }
   };
 

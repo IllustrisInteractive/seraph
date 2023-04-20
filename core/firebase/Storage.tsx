@@ -35,6 +35,21 @@ export class StorageController {
     );
   }
 
+  async upload_files(
+    files: File[],
+    reference: string,
+    onFinishCallback: Function
+  ) {
+    const promises: Promise<any>[] = [];
+    Array.from(files).forEach((file) => {
+      const storageRef = ref(this.storage, reference + "/" + file.name);
+      promises.push(uploadBytes(storageRef, file));
+    });
+    await Promise.all(promises).then(() => {
+      onFinishCallback();
+    });
+  }
+
   uploadResumable(
     file: UploadableAsset,
     reference: string,

@@ -27,6 +27,10 @@ const NewUser: NextPage = () => {
   const [form_verified, setVerified] = useState(false);
   const [form, setForm] = useState<any>();
   const router = useRouter();
+  const [stateSelection, setStateSelection] = useState<any[]>();
+  const [citySelection, setCitySelection] = useState<any[]>();
+  const [selectedState, setSelectedState] = useState<any>();
+  const [selectedCity, setSelectedCity] = useState<any>();
   let authManager: AuthenticationManager;
   let queryController: FirestoreQueryController =
     new FirestoreQueryController();
@@ -62,6 +66,15 @@ const NewUser: NextPage = () => {
     setForm(formCopy);
   };
 
+  useEffect(() => {
+    fetch(`https://psgc.gitlab.io/api/provinces/${selectedState}/cities`)
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Data: ", data);
+        setCitySelection(data);
+      });
+  }, [selectedState]);
+
   const uploadUserData = () => {
     let userData: UploadableUserData = {
       f_name: form["f_name"],
@@ -85,6 +98,20 @@ const NewUser: NextPage = () => {
       }
     );
   };
+
+  useEffect(() => {
+    if (selectedCity) {
+      geocoder.addressToCoordinates(selectedCity, (latlng) => {
+        setCoordinates([latlng["lat"], latlng["lng"]]);
+        let formCopy = { ...form };
+        formCopy["default_location"] = new GeoPoint(
+          latlng["lat"],
+          latlng["lng"]
+        );
+        setForm(formCopy);
+      });
+    }
+  }, [selectedCity]);
 
   useEffect(() => {
     if (!user && ready) {
@@ -113,7 +140,19 @@ const NewUser: NextPage = () => {
         router.replace("/");
       }
     );
+    fetch("https://psgc.gitlab.io/api/provinces/", { method: "GET" })
+      .then((data) => data.json())
+      .then((dataJSON) => {
+        dataJSON = dataJSON.sort((a: any, b: any) => {
+          if (a.name < b.name) {
+            return -1;
+          }
+        });
+        setStateSelection(dataJSON);
+      });
   }, []);
+
+  useEffect(() => {});
 
   useEffect(() => {
     if (
@@ -243,10 +282,34 @@ const NewUser: NextPage = () => {
               )}
               {showCityState && (
                 <div className="grid grid-cols-2">
-                  <label>City</label>
                   <label>State</label>
-                  <select />
-                  <select />
+                  <label>City</label>
+
+                  <select
+                    onChange={(e) => {
+                      alert(e.target.value);
+                      setSelectedState(e.target.value);
+                    }}
+                  >
+                    {stateSelection?.map((state) => {
+                      return (
+                        <option label={state["name"]} value={state["code"]} />
+                      );
+                    })}
+                  </select>
+                  <select
+                    onChange={(e) => {
+                      setSelectedCity(e.target.value);
+                    }}
+                  >
+                    {citySelection &&
+                      citySelection?.map((city) => {
+                        return (
+                          <option label={city["name"]} value={city["name"]} />
+                        );
+                      })}
+                  </select>
+
                   <a
                     onClick={() => {
                       setCityState(false);

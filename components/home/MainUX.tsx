@@ -337,9 +337,19 @@ export const MainUX: FunctionComponent<props> = (props) => {
         <div className="col-span-2">
           <div className="p-4 rounded-lg drop-shadow mb-4 bg-white flex flex-col">
             <div className="flex flex-row">
-              <p className="">User reputation</p>
+              <div className="flex flex-col">
+                <p className="">User reputation</p>
+                <p className="font-bold text-2xl">0</p>
+              </div>
               <div className="grow" />
-              <p className="">Member since</p>
+              <div className="flex flex-col">
+                <p className="">Phone</p>
+                {props.user.phoneNumber ? (
+                  <p className="font-bold text-2xl">Registered</p>
+                ) : (
+                  <p className="font-bold text-2xl">Not registered</p>
+                )}
+              </div>
             </div>
           </div>
           <div className="h-1/2 w-full rounded-lg bg-white relative overflow-hidden shadow-inner z-20">
@@ -460,7 +470,7 @@ const FeedManager = (props: any) => {
 };
 
 const Post = (props: any) => {
-  const [ownerData, setOwner] = useState<DocumentData | null>(null);
+  const [ownerData, setOwner] = useState<DocumentData | undefined>();
 
   const timeDifferenceString = () => {
     let time = Date.now() - props.data.timestamp;

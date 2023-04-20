@@ -22,4 +22,17 @@ export class Geocoder {
         onFailureCallback(error);
       });
   }
+
+  async addressToCoordinates(
+    cityName: string,
+    onSuccessCallback: (result: any) => void
+  ) {
+    axios
+      .get(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${cityName}&key=${this.apiKey}`
+      )
+      .then((response) => {
+        onSuccessCallback(response.data["results"][0]["geometry"]["location"]);
+      });
+  }
 }

@@ -18,12 +18,15 @@ import {
   setDoc,
   addDoc,
   GeoPoint,
+  getDoc,
+  DocumentSnapshot,
 } from "firebase/firestore";
 import { app } from "./FirebaseConfig";
 import Image from "next/image";
 import { UserModel } from "../model/User";
 import { Geopoint, geohashForLocation } from "geofire-common";
 import { User, getAuth } from "firebase/auth";
+import { StorageController } from "./Storage";
 /**
  * Singleton class that controls single/multiple User and Post queries from Cloud Firestore.
  */
@@ -40,31 +43,21 @@ export class FirestoreQueryController {
    * @param type Determines the type of QueryData to be expected after fetching. Expects "user" or "post" and defaults to user on null.
    * @returns UserQueryData if type is "user" or null, and PostQueryData otherwise.
    */
-  public async fetch_post_once(
-    query_class: Query,
-    type?: "user" | null | "post"
-  ): Promise<UserQueryData | PostQueryData> {
-    const collection_ref = collection(this.database, query_class.collection);
-    let q: QuerySnapshot<DocumentData>;
-
-    if (query_class.query) {
-      q = await getDocs(query(collection_ref, ...query_class.query));
-    } else {
-      q = await getDocs(collection_ref);
-    }
-    let documents: DocumentData[] = [];
-
-    if (query_class instanceof UserQuery) {
-      return new UserQueryData(q, collection_ref);
-    } else {
-      return new PostQueryData(q, collection_ref);
-    }
+  public fetch_doc_once(
+    report_id: any,
+    reference: string,
+    callbackFunction: (result: DocumentSnapshot<DocumentData>) => void
+  ): void {
+    getDoc(doc(this.database, reference, report_id)).then((result) => {
+      callbackFunction(result);
+    });
   }
 
   public async fetch_user_once(
     query_class: UserQuery,
-    type?: "user" | null | "post"
-  ): Promise<DocumentData> {
+    type?: "user" | null | "post",
+    redirectCallback?: Function
+  ): Promise<DocumentData | undefined> {
     const collection_ref = collection(this.database, query_class.collection);
     let q: QuerySnapshot<DocumentData>;
 
@@ -74,7 +67,9 @@ export class FirestoreQueryController {
       q = await getDocs(collection_ref);
     }
 
-    return q.docs[0].data();
+    if (q.docs[0]) return q.docs[0].data();
+    else if (redirectCallback) redirectCallback();
+    else return;
   }
 
   public fetch_subscribe(query_class: Query): FirestoreSubscriptionController {
@@ -100,7 +95,7 @@ export class FirestoreQueryController {
     report: Report,
     user: User,
     onFinishCallback: Function,
-    files?: FileList
+    files?: File[]
   ) {
     let reportToUpload: any = report;
     reportToUpload["owner_uid"] = user.uid;
@@ -108,9 +103,20 @@ export class FirestoreQueryController {
       report.location.latitude,
       report.location.longitude,
     ]);
-    addDoc(collection(this.database, "posts"), reportToUpload).then((ref) => {
-      onFinishCallback();
-    });
+
+    if (files) {
+      let storageController = new StorageController();
+
+      addDoc(collection(this.database, "posts"), reportToUpload).then((ref) => {
+        storageController.upload_files(files, ref.id, () => {
+          onFinishCallback();
+        });
+      });
+    } else {
+      addDoc(collection(this.database, "posts"), reportToUpload).then((ref) => {
+        onFinishCallback();
+      });
+    }
   }
 }
 
@@ -120,6 +126,7 @@ export interface Report {
   category: string;
   location: GeoPoint;
   timestamp: number;
+  media: true | false;
 }
 
 export interface UploadableUserData {
