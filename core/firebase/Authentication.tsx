@@ -11,6 +11,7 @@ import {
   onAuthStateChanged,
   User,
   NextOrObserver,
+  createUserWithEmailAndPassword,
 } from "firebase/auth";
 import { app } from "./FirebaseConfig";
 
@@ -55,6 +56,22 @@ export class AuthenticationManager {
   ) {
     if (!this.user) {
       signInWithEmailAndPassword(this.auth, email, password)
+        .then((credential) => {
+          this.user = credential.user;
+        })
+        .catch((error) => {
+          onErrorCallback(error);
+        });
+    }
+  }
+
+  createUserWithEmail(
+    email: string,
+    password: string,
+    onErrorCallback: (error: Error) => void
+  ) {
+    if (!this.user) {
+      createUserWithEmailAndPassword(this.auth, email, password)
         .then((credential) => {
           this.user = credential.user;
         })

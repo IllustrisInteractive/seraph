@@ -64,7 +64,7 @@ export class FirestoreQueryController {
   public async fetch_user_once(
     query_class: UserQuery,
     type?: "user" | null | "post"
-  ): Promise<UserQueryData> {
+  ): Promise<DocumentData> {
     const collection_ref = collection(this.database, query_class.collection);
     let q: QuerySnapshot<DocumentData>;
 
@@ -73,9 +73,8 @@ export class FirestoreQueryController {
     } else {
       q = await getDocs(collection_ref);
     }
-    let documents: DocumentData[] = [];
 
-    return new UserQueryData(q, collection_ref);
+    return q.docs[0].data();
   }
 
   public fetch_subscribe(query_class: Query): FirestoreSubscriptionController {

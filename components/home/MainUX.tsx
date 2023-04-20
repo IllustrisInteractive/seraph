@@ -13,13 +13,16 @@ import {
   FirestoreQueryController,
   FirestoreSubscriptionController,
   PostQuery,
+  UserQuery,
 } from "../../core/firebase/Firestore";
 import { AuthenticationManager } from "../../core/firebase/Authentication";
 import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
 import NewPostModal from "./MainUX/NewPostModal";
 import { distanceBetween, geohashQueryBounds } from "geofire-common";
 import {
+  DocumentData,
   DocumentReference,
+  Query,
   collection,
   doc,
   endAt,
@@ -29,8 +32,9 @@ import {
   orderBy,
   query,
   startAt,
+  where,
 } from "firebase/firestore";
-import { CircleLoader } from "react-spinners";
+import { BeatLoader, CircleLoader } from "react-spinners";
 
 interface props {
   authManager: AuthenticationManager | undefined;
@@ -44,6 +48,9 @@ export const MainUX: FunctionComponent<props> = (props) => {
   const [ready, setReady] = useState(false);
   const [location, setLocation] = useState();
   const [userPopupState, setUserPopup] = useState(false);
+  const [categoryFilter, setFilter] = useState<
+    "incident" | "accident" | "hazard" | "crime" | undefined
+  >();
 
   let geocoder: Geocoder;
   let queryController: FirestoreQueryController;
@@ -254,9 +261,76 @@ export const MainUX: FunctionComponent<props> = (props) => {
           >
             Create Report
           </motion.button>
+          <p>Filter by Category</p>
+          <motion.div className="flex flex-row space-x-4 font-bold text-black">
+            <motion.button
+              className={`px-4 py-2 rounded-lg ${
+                !categoryFilter ? "bg-blue-500 text-white" : "bg-white"
+              } grow hover:drop-shadow transition`}
+              layoutId="no_filter"
+              onClick={() => {
+                setFilter(undefined);
+              }}
+            >
+              All
+            </motion.button>
+            <motion.button
+              className={`px-4 py-2 rounded-lg ${
+                categoryFilter == "incident"
+                  ? "bg-black text-white"
+                  : "bg-white"
+              } grow hover:drop-shadow transition`}
+              layoutId="incident_filter"
+              onClick={() => {
+                setFilter("incident");
+              }}
+            >
+              Incident
+            </motion.button>
+            <motion.button
+              className={`px-4 py-2 rounded-lg ${
+                categoryFilter == "accident"
+                  ? "bg-yellow-500 text-white"
+                  : "bg-white"
+              } grow hover:drop-shadow transition`}
+              layoutId="accident_filter"
+              onClick={() => {
+                setFilter("accident");
+              }}
+            >
+              Accident
+            </motion.button>
+            <motion.button
+              className={`px-4 py-2 rounded-lg ${
+                categoryFilter == "hazard"
+                  ? "bg-orange-400 text-white"
+                  : "bg-white"
+              } grow hover:drop-shadow transition`}
+              layoutId="hazard_filter"
+              onClick={() => {
+                setFilter("hazard");
+              }}
+            >
+              Hazard
+            </motion.button>
+            <motion.button
+              className={`px-4 py-2 rounded-lg ${
+                categoryFilter == "crime" ? "bg-red-700 text-white" : "bg-white"
+              } grow hover:drop-shadow transition`}
+              layoutId="crime_filter"
+              onClick={() => {
+                setFilter("crime");
+              }}
+            >
+              Crime
+            </motion.button>
+          </motion.div>
           {coordinates && (
             <>
-              <FeedManager coordinates={coordinates} />
+              <FeedManager
+                coordinates={coordinates}
+                categoryFilter={categoryFilter}
+              />
             </>
           )}
         </div>
@@ -290,56 +364,72 @@ const FeedManager = (props: any) => {
   const [loading, setLoading] = useState(false);
   useEffect(() => {
     if (props.coordinates) {
-      setLoading(true);
-      const bounds = geohashQueryBounds(props.coordinates, 50 * 1000);
-      const promises = [];
+      reload();
+    }
+  }, [props.coordinates, props.categoryFilter]);
+
+  const reload = () => {
+    setLoading(true);
+    const bounds = geohashQueryBounds(props.coordinates, 50 * 1000);
+    const promises = [];
+    let q: Query;
+
+    if (props.categoryFilter) {
       for (const b of bounds) {
-        const q = query(
+        q = query(
           collection(getFirestore(), "posts"),
+          where("category", "==", props.categoryFilter),
           orderBy("location_hash"),
+          orderBy("timestamp", "desc"),
+
           startAt(b[0]),
           endAt(b[1])
         );
 
         promises.push(getDocs(q));
       }
+    } else {
+      for (const b of bounds) {
+        q = query(
+          collection(getFirestore(), "posts"),
+          orderBy("location_hash"),
+          orderBy("timestamp", "desc"),
+          startAt(b[0]),
+          endAt(b[1])
+        );
 
-      Promise.all(promises)
-        .then((snapshots) => {
-          const matchingDocs: any[] = [];
+        promises.push(getDocs(q));
+      }
+    }
 
-          for (const snap of snapshots) {
-            for (const document of snap.docs) {
-              const lat = document.data()["location"]["_lat"];
-              const lng = document.data()["location"]["_long"];
+    Promise.all(promises)
+      .then((snapshots) => {
+        const matchingDocs: any[] = [];
 
-              // We have to filter out a few false positives due to GeoHash
-              // accuracy, but most will match
-              const distanceInKm = distanceBetween(
-                [lat, lng],
-                props.coordinates
-              );
-              const distanceInM = distanceInKm * 1000;
-              if (distanceInM <= 50 * 1000) {
-                let data = document.data();
-                let owner = getDoc(
-                  doc(getFirestore(), "users", data["owner_uid"])
-                );
-                data["owner"] = owner;
-                data["distance"] = distanceInM;
-                matchingDocs.push(data);
-              }
+        for (const snap of snapshots) {
+          for (const document of snap.docs) {
+            const lat = document.data()["location"]["_lat"];
+            const lng = document.data()["location"]["_long"];
+
+            // We have to filter out a few false positives due to GeoHash
+            // accuracy, but most will match
+            const distanceInKm = distanceBetween([lat, lng], props.coordinates);
+            const distanceInM = distanceInKm * 1000;
+            if (distanceInM <= 50 * 1000) {
+              let data = document.data();
+              data["distance"] = distanceInM;
+              matchingDocs.push(data);
             }
           }
+        }
 
-          return matchingDocs;
-        })
-        .then((matchingDocs) => {
-          setLoading(false);
-          setPosts(matchingDocs);
-        });
-    }
-  }, [props.coordinates]);
+        return matchingDocs;
+      })
+      .then((matchingDocs) => {
+        setLoading(false);
+        setPosts(matchingDocs);
+      });
+  };
 
   return (
     <motion.div className="w-full flex flex-col items-center">
@@ -358,45 +448,113 @@ const FeedManager = (props: any) => {
 };
 
 const Post = (props: any) => {
+  const [ownerData, setOwner] = useState<DocumentData | null>(null);
+
+  const timeDifferenceString = () => {
+    let time = Date.now() - props.data.timestamp;
+
+    var daysDifference = Math.floor(time / 1000 / 60 / 60 / 24);
+    time -= daysDifference * 1000 * 60 * 60 * 24;
+
+    var hoursDifference = Math.floor(time / 1000 / 60 / 60);
+    time -= hoursDifference * 1000 * 60 * 60;
+
+    var minutesDifference = Math.floor(time / 1000 / 60);
+    time -= minutesDifference * 1000 * 60;
+
+    let result = "";
+
+    if (minutesDifference < 15) {
+      result = `Now`;
+    }
+    if (minutesDifference > 0) {
+      result = `${minutesDifference}m`;
+    }
+    if (hoursDifference > 0) {
+      result = `${hoursDifference}h `;
+    }
+    if (daysDifference > 0) {
+      result = `${daysDifference}d `;
+    }
+
+    return result;
+  };
   useEffect(() => {
-    console.log(props.data);
+    let controller = new FirestoreQueryController();
+    let query: UserQuery = {
+      collection: "users",
+      query: [where("__name__", "==", props.data.owner_uid)],
+    };
+    controller.fetch_user_once(query).then((userDoc) => {
+      setOwner(userDoc);
+    });
   }, []);
+
+  const getCategoryColor = () => {
+    switch (props.data.category) {
+      case "hazard":
+        return "bg-orange-400 text-white";
+      case "accident":
+        return "bg-yellow-300 text-black";
+      case "incident":
+        return "bg-black text-white";
+      case "crime":
+        return "bg-red-400 text-white";
+      default:
+        break;
+    }
+  };
   return (
     <div className="bg-white w-full rounded-lg shadow-lg p-4 mb-4 flex flex-col overflow-hidden">
-      <div className="flex flex-row space-x-2">
-        {" "}
-        {/** Post component header */}
-        <div className="h-9 w-9 rounded-full bg-black">
-          {/** Profile picture placeholder */}
-        </div>
-        <div className="flex flex-col h-9 grow">
-          <p className="font-bold text-sm">Test Account</p>
-          <p className="font-bold text-gray-400 text-xs">
-            2h - {props.data.distance / 1000} km away
-          </p>
-        </div>
-        <div className="flex flex-row space-x-4 items-center">
-          <div className="flex flex-row space-x-2 items-center font-bold text-green-500">
-            ^ <p>0</p>
+      {ownerData && (
+        <>
+          <div className="flex flex-row space-x-2">
+            {" "}
+            {/** Post component header */}
+            <div className="h-9 w-9 rounded-full bg-black">
+              {/** Profile picture placeholder */}
+            </div>
+            <div className="flex flex-col h-9 grow">
+              <p className="font-bold text-sm">
+                {`${ownerData["f_name"]} ${ownerData["l_name"]}`}
+              </p>
+              <p className="font-bold text-gray-400 text-xs">
+                {timeDifferenceString()} - {props.data.distance / 1000} km away
+              </p>
+            </div>
+            <div className="flex flex-row space-x-4 items-center">
+              <div className="flex flex-row space-x-2 items-center font-bold text-green-500">
+                ^ <p>0</p>
+              </div>
+              <div className="flex flex-row space-x-2 items-center font-bold text-red-500">
+                ^ <p>0</p>
+              </div>
+            </div>
           </div>
-          <div className="flex flex-row space-x-2 items-center font-bold text-red-500">
-            ^ <p>0</p>
+          <div className="flex flex-col mt-4">
+            <div
+              className={`px-2 py-1 rounded-full font-bold text-xs text-center ${getCategoryColor()} w-fit`}
+            >
+              {props.data["category"].charAt(0).toUpperCase() +
+                props.data["category"].slice(1)}
+            </div>
+            <p className="font-bold text-xl">{props.data.title}</p>
+            <p className="leading-tight mt-2 grow">{props.data.content}</p>
           </div>
-        </div>
-      </div>
-      <div className="flex flex-col mt-4">
-        <div className="px-2 py-1 rounded-full font-bold text-xs text-center text-white bg-orange-400 w-fit">
-          Hazard
-        </div>
-        <p className="font-bold text-xl">{props.data.title}</p>
-        <p className="leading-tight mt-2 grow">{props.data.content}</p>
-      </div>
-      <div className="bg-gradient-to-r from-transparent via-gray-300 to-transparent h-[1px] mt-2" />
-      <div className="grid grid-cols-3 h-12 -mb-4 -ml-4 -mr-4">
-        <button className="hover:bg-gray-200 font-bold">Upvote</button>
-        <button className="hover:bg-gray-200 font-bold">Downvote</button>
-        <button className="hover:bg-gray-200 font-bold">Comments</button>
-      </div>
+          <div className="bg-gradient-to-r from-transparent via-gray-300 to-transparent h-[1px] mt-2" />
+          <div className="grid grid-cols-3 h-12 -mb-4 -ml-4 -mr-4">
+            <button className="hover:bg-gray-200 font-bold">Upvote</button>
+            <button className="hover:bg-gray-200 font-bold">Downvote</button>
+            <button className="hover:bg-gray-200 font-bold">Comments</button>
+          </div>
+        </>
+      )}
+      {!ownerData && (
+        <motion.div className="flex flex-col items-center">
+          <BeatLoader />
+          <p>Loading post</p>
+        </motion.div>
+      )}
     </div>
   );
 };

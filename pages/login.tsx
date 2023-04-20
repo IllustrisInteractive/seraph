@@ -8,25 +8,32 @@ import { AuthenticationManager } from "../core/firebase/Authentication";
 import { useRouter } from "next/router";
 
 const SignInPage: FunctionComponent = () => {
-  const [email, setEmail] = useState(false);
-  const [password, setPass] = useState(false);
+  const [email, setEmail] = useState<string | undefined>();
+  const [password, setPass] = useState<string | undefined>();
   const [signingIn, setSigning] = useState(false);
+  const [signUp, setSignUp] = useState(false);
 
   const router = useRouter();
 
-  let authManager: AuthenticationManager;
+  const useAuth = () => {
+    const [auth, setAuth] = useState<AuthenticationManager>();
 
-  useEffect(() => {
-    document.title = "Log In | Seraph";
-    authManager = new AuthenticationManager(
-      (user) => {
-        if (user) {
-          router.replace("/");
-        }
-      },
-      () => {}
-    );
-  }, []);
+    useEffect(() => {
+      let authManager = new AuthenticationManager(
+        (user) => {
+          if (user) {
+            router.replace("/");
+          }
+        },
+        () => {}
+      );
+      setAuth(authManager);
+    }, []);
+
+    return auth;
+  };
+
+  const authManager = useAuth();
 
   function handleEmail(e: any): void {
     if (
@@ -34,24 +41,43 @@ const SignInPage: FunctionComponent = () => {
         /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:.[a-zA-Z0-9-]+)*$/
       )
     )
-      setEmail(true);
-    else setEmail(false);
+      setEmail(e.target.value);
+    else setEmail(undefined);
   }
 
-  function handleSignIn() {}
+  const handleSignIn = (e: any) => {
+    e.preventDefault();
+    setSigning(true);
+    if (signUp && email && password) {
+      authManager!.createUserWithEmail(email, password, (error) => {
+        alert(error);
+      });
+    } else if (email && password) {
+      authManager!.authenticateUserWithEmail(email, password, (error) => {
+        alert(error);
+      });
+    } else {
+      alert("Log in stopped");
+    }
+  };
 
   function handleSignInWithGoogle() {
     setSigning(true);
-    authManager.authenticateUserWithGoogle((error) => {
+    authManager!.authenticateUserWithGoogle((error) => {
       console.log(error);
       setSigning(false);
     });
   }
 
   function handlePassword(e: any): void {
-    if (e.target.value.length > 8) setPass(true);
-    else setPass(false);
+    if (e.target.value.length > 8) setPass(e.target.value);
+    else setPass(undefined);
   }
+
+  const toggleSignUp = (e: any) => {
+    e.preventDefault();
+    setSignUp(!signUp);
+  };
   return (
     <>
       <motion.div
@@ -89,16 +115,22 @@ const SignInPage: FunctionComponent = () => {
                   />
                   <input
                     type="submit"
-                    value="Log in"
+                    value={signUp ? "Sign up" : "Log in"}
                     className={`cursor-pointer text-lg font-bold py-2 rounded text-white transition-colors ${
                       email && password
                         ? "bg-blue-700 hover:scale-105 transition-transform"
                         : "bg-gray-400 pointer-events-none"
                     }`}
-                    onClick={() => handleSignIn()}
+                    onClick={handleSignIn}
                   />
                   <div className="flex flex-row">
-                    <a href="">Create an account</a>
+                    {!signUp ? (
+                      <button onClick={toggleSignUp}>Create an account</button>
+                    ) : (
+                      <button onClick={toggleSignUp}>
+                        Log into existing account
+                      </button>
+                    )}
                     <div className="grow" />
                     <a href="">Reset password</a>
                   </div>
@@ -125,13 +157,13 @@ const SignInPage: FunctionComponent = () => {
                 className="flex flex-col justify-center items-center space-y-2 mb-4"
               >
                 <BeatLoader />
-                <p>Signing you in</p>
+                {signUp ? <p>Creating your account</p> : <p>Signing you in</p>}
               </motion.div>
             )}
           </AnimatePresence>
           <motion.p className="w-2/4 text-center text-sm text-gray-400">
-            By signing in, you agree to Seraph's Terms and Conditions and
-            Privacy Policy.
+            By {signUp ? "signing up" : "signing in"}, you agree to SERAPH's
+            Terms and Conditions and Privacy Policy.
           </motion.p>
 
           <motion.div className="h-8" />

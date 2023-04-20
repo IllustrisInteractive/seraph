@@ -61,9 +61,8 @@ export class UserModel {
     this._defaultLocation = [0, 0];
     let firestoreController = new FirestoreQueryController();
     let query = new UserQuery("users", true, where("__name__", "==", user.uid));
-    firestoreController.fetch_user_once(query).then((user_query) => {
-      if (user_query.getDocuments().length > 0) {
-        let userDoc = user_query.getDocuments()[0];
+    firestoreController.fetch_user_once(query).then((userDoc) => {
+      if (userDoc) {
         this._fName = userDoc["f_name"];
         this._lName = userDoc["l_name"];
         this._dateOfBirth = new Date(userDoc["dateOfBirth"]);
