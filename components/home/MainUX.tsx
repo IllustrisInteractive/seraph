@@ -335,6 +335,13 @@ export const MainUX: FunctionComponent<props> = (props) => {
           )}
         </div>
         <div className="col-span-2">
+          <div className="p-4 rounded-lg drop-shadow mb-4 bg-white flex flex-col">
+            <div className="flex flex-row">
+              <p className="">User reputation</p>
+              <div className="grow" />
+              <p className="">Member since</p>
+            </div>
+          </div>
           <div className="h-1/2 w-full rounded-lg bg-white relative overflow-hidden shadow-inner z-20">
             {isLoaded && (
               <GoogleMap
@@ -443,6 +450,11 @@ const FeedManager = (props: any) => {
         posts.map((postData: any) => {
           return <Post data={postData} />;
         })}
+      {!loading && posts?.length == 0 && (
+        <p className="text-xl font-semibold text-gray-500">
+          There are currently no reports in this category within your location.
+        </p>
+      )}
     </motion.div>
   );
 };
