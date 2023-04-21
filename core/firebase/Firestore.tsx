@@ -94,7 +94,7 @@ export class FirestoreQueryController {
   public async uploadReport(
     report: Report,
     user: User,
-    onFinishCallback: Function,
+    onFinishCallback: (coordinates: any, doc_id: string) => void,
     files?: File[]
   ) {
     let reportToUpload: any = report;
@@ -103,18 +103,20 @@ export class FirestoreQueryController {
       report.location.latitude,
       report.location.longitude,
     ]);
+    reportToUpload["upvotes"] = [];
+    reportToUpload["downvotes"] = [];
 
     if (files) {
       let storageController = new StorageController();
 
       addDoc(collection(this.database, "posts"), reportToUpload).then((ref) => {
         storageController.upload_files(files, ref.id, () => {
-          onFinishCallback();
+          onFinishCallback(reportToUpload["location"], ref.id);
         });
       });
     } else {
       addDoc(collection(this.database, "posts"), reportToUpload).then((ref) => {
-        onFinishCallback();
+        onFinishCallback(reportToUpload["location"], ref.id);
       });
     }
   }

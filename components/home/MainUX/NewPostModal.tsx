@@ -7,7 +7,21 @@ import {
   FirestoreQueryController,
   Report,
 } from "../../../core/firebase/Firestore";
-import { GeoPoint } from "firebase/firestore";
+import {
+  DocumentData,
+  GeoPoint,
+  Query,
+  QueryDocumentSnapshot,
+  collection,
+  endAt,
+  getDocs,
+  getFirestore,
+  orderBy,
+  query,
+  startAt,
+  where,
+} from "firebase/firestore";
+import { distanceBetween, geohashQueryBounds } from "geofire-common";
 
 interface NewPostModalProps {
   toggleModal: Function;
@@ -55,8 +69,51 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
       controller.uploadReport(
         reportToUpload,
         props.user.authUser!,
-        () => {
-          props.toggleModal();
+        (coordinates, doc_id) => {
+          const bounds = geohashQueryBounds(coordinates, 50 * 1000);
+          const promises = [];
+          let q: Query;
+          for (const b of bounds) {
+            q = query(
+              collection(getFirestore(), "posts"),
+              orderBy("location_hash"),
+              orderBy("timestamp", "desc"),
+
+              startAt(b[0]),
+              endAt(b[1])
+            );
+
+            promises.push(getDocs(q));
+          }
+          Promise.all(promises)
+            .then((snapshots) => {
+              const matchingDocs: any[] = [];
+
+              for (const snap of snapshots) {
+                for (const document of snap.docs) {
+                  const lat = document.data()["location"]["_lat"];
+                  const lng = document.data()["location"]["_long"];
+
+                  // We have to filter out a few false positives due to GeoHash
+                  // accuracy, but most will match
+                  const distanceInKm = distanceBetween([lat, lng], coordinates);
+                  const distanceInM = distanceInKm * 1000;
+                  if (distanceInM <= 50 * 1000) {
+                    document.data()["distance"] = distanceInM;
+                    matchingDocs.push(document);
+                  }
+                }
+              }
+
+              return matchingDocs;
+            })
+            .then((matchingDocs: QueryDocumentSnapshot<DocumentData>[]) => {
+              matchingDocs.forEach((document) => {
+                if (document.data()["phone_number"]) {
+                }
+              });
+              props.toggleModal();
+            });
         },
         filesSelected
       );

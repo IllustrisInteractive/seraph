@@ -1,12 +1,25 @@
 import { useRouter } from "next/router";
 import { use, useCallback, useEffect, useState } from "react";
 import { FirestoreQueryController } from "../../core/firebase/Firestore";
-import { DocumentData } from "firebase/firestore";
+import {
+  DocumentData,
+  DocumentSnapshot,
+  collection,
+  doc,
+  getDoc,
+  getFirestore,
+  onSnapshot,
+  orderBy,
+  query,
+} from "firebase/firestore";
 import { Geocoder } from "../../core/maps/geocoding";
 import Head from "next/head";
 import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
 
 const DedicatedReportPage = () => {
+  const [comments, setComments] = useState<DocumentSnapshot<DocumentData>[]>(
+    []
+  );
   const [ready, setReady] = useState(false);
   const [post, setPost] = useState<DocumentData>();
   const [owner, setOwner] = useState<DocumentData>();
@@ -28,14 +41,6 @@ const DedicatedReportPage = () => {
         lng: post!["location"].longitude,
       }
     : { lat: 0, lng: 0 };
-
-  const onLoad = useCallback(function callback(map: any) {
-    // This is just an example of getting and using the map instance!!! don't just blindly copy!
-    const bounds = new window.google.maps.LatLngBounds(center);
-    map.fitBounds(bounds);
-
-    setMap(map);
-  }, []);
 
   const onUnmount = useCallback(function callback(map: any) {
     setMap(null);
@@ -66,6 +71,21 @@ const DedicatedReportPage = () => {
           ]);
         } else router.replace("/");
       });
+
+      console.log("Now subscribed");
+      const unsub = onSnapshot(
+        query(
+          collection(getFirestore(), "comments/" + post_id + "/rtc"),
+          orderBy("timestamp", "desc")
+        ),
+        (snapshot) => {
+          console.log("New snapshot", snapshot.docs);
+          setComments(snapshot.docs);
+        }
+      );
+      return () => {
+        unsub();
+      };
     }
   }, [post_id]);
 
@@ -79,13 +99,37 @@ const DedicatedReportPage = () => {
     }
   }, [post]);
 
-  useEffect(() => {
-    if (owner && location && coordinates) setReady(true);
-  }, [owner, location, coordinates]);
+  const CommentUser = (props: any) => {
+    const [user, setUser] = useState<DocumentData>();
+    useEffect(() => {
+      getDoc(doc(getFirestore(), "users/" + props.data.author_uid)).then(
+        (document) => {
+          if (document.exists()) {
+            setUser(document.data());
+          }
+        }
+      );
+    }, []);
+
+    return (
+      <>
+        {user && (
+          <p>
+            {
+              <span className="font-bold">
+                {user.f_name + " " + user.l_name}
+              </span>
+            }
+            : {props.data.content}
+          </p>
+        )}
+      </>
+    );
+  };
 
   return (
     <div className="bg-blue-200 p-16 h-screen w-screen flex flex-col justify-center items-center">
-      {ready && (
+      {owner && location && coordinates && comments && comments.length > 0 ? (
         <div className="bg-gray-50 grow w-full rounded-lg drop-shadow-lg grid grid-cols-2 overflow-hidden">
           <div className="bg-black" />
           <div className="flex flex-col p-8">
@@ -113,7 +157,16 @@ const DedicatedReportPage = () => {
             <div className="h-1/2 grid grid-cols-2 w-full gap-x-4">
               <div className="drop-shadow-lg bg-white rounded-lg p-4 flex flex-col">
                 <p className="font-bold text-xl mb-2">Live Discussion</p>
-                <div className="grow bg-gray-200 rounded"></div>
+                <div className="grow bg-gray-200 rounded flex flex-col p-2">
+                  {comments!.map((comment) => {
+                    let data = comment.data();
+                    return (
+                      <div className="flex flex-row" key={comment.id}>
+                        <CommentUser data={data} />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
               {isLoaded && (
                 <GoogleMap
@@ -132,8 +185,9 @@ const DedicatedReportPage = () => {
             </div>
           </div>
         </div>
+      ) : (
+        <>Loading</>
       )}
-      {!ready && <>Loading</>}
     </div>
   );
 };

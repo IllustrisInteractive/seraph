@@ -22,19 +22,28 @@ import { distanceBetween, geohashQueryBounds } from "geofire-common";
 import {
   DocumentData,
   DocumentReference,
+  DocumentSnapshot,
+  GeoPoint,
   Query,
+  QueryDocumentSnapshot,
+  Unsubscribe,
+  arrayRemove,
+  arrayUnion,
   collection,
   doc,
   endAt,
   getDoc,
   getDocs,
   getFirestore,
+  onSnapshot,
   orderBy,
   query,
   startAt,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { BeatLoader, CircleLoader } from "react-spinners";
+import { getAuth } from "firebase/auth";
 
 interface props {
   authManager: AuthenticationManager | undefined;
@@ -152,6 +161,13 @@ export const MainUX: FunctionComponent<props> = (props) => {
     queryController = new FirestoreQueryController();
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        let last_location = new GeoPoint(
+          position.coords.latitude,
+          position.coords.longitude
+        );
+        updateDoc(doc(getFirestore(), "users/" + props.user.authUser?.uid), {
+          last_location: last_location,
+        });
         setCoordinates([position.coords.latitude, position.coords.longitude]);
         setDefault(false);
       },
@@ -180,9 +196,106 @@ export const MainUX: FunctionComponent<props> = (props) => {
       props.user.setCurrentLocation(coordinates);
     }
   }, [coordinates]);
+
+  const PhoneVerificationWidget = () => {
+    const [number, setNumber] = useState<string>();
+    const [verifying, setVerifying] = useState(false);
+    const [code, setCode] = useState<string>();
+    const [complete, setComplete] = useState(false);
+
+    const createVerificationCode = () => {
+      fetch(`/api/verify/${props.user.authUser?.uid}?number=${number}`).then(
+        () => {
+          setVerifying(true);
+        }
+      );
+    };
+
+    const verifyCode = () => {
+      fetch(
+        `/api/verify/${props.user.authUser?.uid}?number=${number}&code=${code}`
+      )
+        .then((result) => result.json())
+        .then((data) => {
+          if (data.status == "approved") {
+            updateDoc(
+              doc(getFirestore(), "users/" + props.user.authUser?.uid),
+              {
+                phone_number: number,
+              }
+            );
+            setVerifying(false);
+            setComplete(true);
+          }
+        });
+    };
+
+    return (
+      <>
+        {complete && (
+          <div className="bg-blue-600 grow p-2 text-white text-center font-bold">
+            Successfully registered phone number
+          </div>
+        )}
+        {verifying ? (
+          <div className="grid grid-cols-2 gap-x-4 mt-4">
+            <div className="flex flex-row p-2 bg-gray-200 rounded items-center">
+              <input
+                key="code"
+                className="text-xl appearance-none bg-transparent"
+                type="number"
+                onChange={(e) => {
+                  setCode(e.target.value);
+                }}
+                placeholder="Verification Code"
+              />
+            </div>
+            <button
+              className={` bg-blue-600 text-white font-bold rounded`}
+              onClick={() => {
+                verifyCode();
+              }}
+            >
+              Enter Verification Code
+            </button>
+          </div>
+        ) : !complete ? (
+          <div className="grid grid-cols-2 gap-x-4 mt-4">
+            <div className="flex flex-row p-2 bg-gray-200 rounded items-center">
+              <p className="text-xl font-bold">+63</p>
+              <input
+                className="text-xl appearance-none bg-transparent"
+                type="number"
+                onChange={(e) => {
+                  if (e.target.value.length == 10) setNumber(e.target.value);
+                  else setNumber(undefined);
+                }}
+                placeholder="9123456789"
+              />
+            </div>
+            <button
+              className={` ${
+                number ? "bg-blue-600" : "bg-gray-400 cursor-default"
+              } text-white font-bold rounded`}
+              onClick={() => {
+                if (number) {
+                  createVerificationCode();
+                }
+              }}
+            >
+              Send Verification Code
+            </button>
+          </div>
+        ) : (
+          <></>
+        )}
+      </>
+    );
+  };
+
   return (
     <motion.div
-      className="flex flex-col grow w-full h-full bg-gray-200"
+      className="flex flex-col grow w-full h-full bg-slate-200"
       transition={{ delayChildren: 0.5, duration: 0.5, ease: easeInOut }}
       initial={{ opacity: 0 }}
       exit={{ opacity: 0 }}
@@ -196,19 +309,19 @@ export const MainUX: FunctionComponent<props> = (props) => {
         )}
       </AnimatePresence>
       <motion.div
-        className="px-16 py-4 bg-gray-100 grid grid-cols-6 items-center gap-x-4 z-40"
+        className="px-16 py-4 bg-slate-400 grid grid-cols-6 items-center gap-x-4 z-40"
         initial={{ y: "-5vh", opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: "easeInOut" }}
       >
-        <p className="font-bold col-span-1 text-xl">SERAPH</p>
-        <div className="bg-gray-400 py-2 px-4 col-span-3 rounded-lg shadow-inner text-white">
+        <p className="font-bold col-span-1 text-xl text-white">SERAPH</p>
+        <div className="bg-slate-700 py-2 px-4 col-span-3 rounded-lg shadow-inner text-white">
           Search
         </div>
         <div className="col-span-2 flex flex-row">
           <div className="grow" />
           <div
-            className="relative"
+            className="relative bg-slate-100 py-2 px-4 drop-shadow rounded-full cursor-pointer"
             onClick={() => {
               setUserPopup(!userPopupState);
             }}
@@ -225,13 +338,25 @@ export const MainUX: FunctionComponent<props> = (props) => {
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5, ease: easeInOut }}
         >
-          <div className="bg-white font-bold text-2xl space-y-4 rounded-lg px-4 py-2 flex flex-col">
-            <div>Home</div>
-            <div>Live Map</div>
-            <div>Notifications</div>
-            <div>Settings</div>
+          <div className=" text-2xl mt-8 space-y-10 rounded-lg flex flex-col">
+            <div className="font-bold flex flex-row space-x-6 items-center">
+              <img src="home.svg" className="h-7 w-auto" />
+              <p>Home</p>
+            </div>
+            <div className="flex flex-row space-x-6 items-center">
+              <img src="map.svg" className="h-7 w-auto" />
+              <p>Live Map</p>
+            </div>
+            <div className="flex flex-row space-x-6 items-center">
+              <img src="user-outline.svg" className="h-7 w-auto" />
+              <p>Your Profile</p>
+            </div>
+            <div className="flex flex-row space-x-6 items-center">
+              <img src="cog.svg" className="h-7 w-auto" />
+              <p>Settings</p>
+            </div>
           </div>
-          <div className="flex flex-col mt-4">
+          <div className="flex flex-col mt-16">
             <p className="text-xs">Your current location</p>
             <p className="text-lg leading-tight font-bold">{location}</p>
             <button
@@ -328,6 +453,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
           {coordinates && (
             <>
               <FeedManager
+                currentUser_uid={getAuth().currentUser?.uid}
                 coordinates={coordinates}
                 categoryFilter={categoryFilter}
               />
@@ -336,21 +462,36 @@ export const MainUX: FunctionComponent<props> = (props) => {
         </div>
         <div className="col-span-2">
           <div className="p-4 rounded-lg drop-shadow mb-4 bg-white flex flex-col">
-            <div className="flex flex-row">
-              <div className="flex flex-col">
-                <p className="">User reputation</p>
-                <p className="font-bold text-2xl">0</p>
-              </div>
-              <div className="grow" />
-              <div className="flex flex-col">
-                <p className="">Phone</p>
-                {props.user.phoneNumber ? (
+            {props.user.phoneNumber ? (
+              <div className="flex flex-row">
+                <div className="flex flex-col">
+                  <p className="">User reputation</p>
+                  <p className="font-bold text-2xl">0</p>
+                </div>
+                <div className="grow" />
+                <div className="flex flex-col">
+                  <p className="">Phone</p>
                   <p className="font-bold text-2xl">Registered</p>
-                ) : (
-                  <p className="font-bold text-2xl">Not registered</p>
-                )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex flex-row">
+                  <img src="" />
+                  <div className="flex flex-col">
+                    <p className="font-bold text-lg">
+                      Hi, friend. Stay safe even when offline.
+                    </p>
+                    <p>
+                      Register your phone number to receive notifications of new
+                      reports in your last known location without logging into
+                      the app.
+                    </p>
+                  </div>
+                </div>
+                <PhoneVerificationWidget />
+              </>
+            )}
           </div>
           <div className="h-1/2 w-full rounded-lg bg-white relative overflow-hidden shadow-inner z-20">
             {isLoaded && (
@@ -433,9 +574,8 @@ const FeedManager = (props: any) => {
             const distanceInKm = distanceBetween([lat, lng], props.coordinates);
             const distanceInM = distanceInKm * 1000;
             if (distanceInM <= 50 * 1000) {
-              let data = document.data();
-              data["distance"] = distanceInM;
-              matchingDocs.push(data);
+              document.data()["distance"] = distanceInM;
+              matchingDocs.push(document);
             }
           }
         }
@@ -457,8 +597,15 @@ const FeedManager = (props: any) => {
       )}
       {!loading &&
         posts &&
-        posts.map((postData: any) => {
-          return <Post data={postData} />;
+        posts.map((postData: any, idx: number) => {
+          return (
+            <Post
+              key={idx}
+              currentUser_uid={props.currentUser_uid}
+              data={postData.data()}
+              id={postData.id}
+            />
+          );
         })}
       {!loading && posts?.length == 0 && (
         <p className="text-xl font-semibold text-gray-500">
@@ -471,6 +618,10 @@ const FeedManager = (props: any) => {
 
 const Post = (props: any) => {
   const [ownerData, setOwner] = useState<DocumentData | undefined>();
+  const [voteState, setVote] = useState<"upvote" | "downvote" | "none">("none");
+  const [showComments, setShowComments] = useState(false);
+
+  const shareRef = useRef<HTMLInputElement>(null);
 
   const timeDifferenceString = () => {
     let time = Date.now() - props.data.timestamp;
@@ -508,6 +659,13 @@ const Post = (props: any) => {
       query: [where("__name__", "==", props.data.owner_uid)],
     };
     controller.fetch_user_once(query).then((userDoc) => {
+      if (props.data.upvotes.includes(props.currentUser_uid)) {
+        setVote("upvote");
+      } else if (props.data.downvotes.includes(props.currentUser_uid)) {
+        setVote("downvote");
+      } else {
+        setVote("none");
+      }
       setOwner(userDoc);
     });
   }, []);
@@ -526,10 +684,47 @@ const Post = (props: any) => {
         break;
     }
   };
+
+  const upvote = () => {
+    if (voteState == "upvote") {
+      setVote("none");
+      updateDoc(doc(getFirestore(), "posts/" + props.id), {
+        upvotes: arrayRemove(props.currentUser_uid),
+      });
+    } else {
+      setVote("upvote");
+      updateDoc(doc(getFirestore(), "posts/" + props.id), {
+        downvotes: arrayRemove(props.currentUser_uid),
+        upvotes: arrayUnion(props.currentUser_uid),
+      });
+    }
+  };
+
+  const downvote = () => {
+    if (voteState == "downvote") {
+      updateDoc(doc(getFirestore(), "posts/" + props.id), {
+        downvotes: arrayRemove(props.currentUser_uid),
+      });
+      setVote("none");
+    } else {
+      updateDoc(doc(getFirestore(), "posts/" + props.id), {
+        upvotes: arrayRemove(props.currentUser_uid),
+        downvotes: arrayUnion(props.currentUser_uid),
+      });
+      setVote("downvote");
+    }
+  };
+
   return (
     <div className="bg-white w-full rounded-lg shadow-lg p-4 mb-4 flex flex-col overflow-hidden">
       {ownerData && (
         <>
+          <input
+            className="hidden"
+            type="text"
+            ref={shareRef}
+            value={"http://localhost:3000/report/" + props.id}
+          />
           <div className="flex flex-row space-x-2">
             {" "}
             {/** Post component header */}
@@ -546,29 +741,68 @@ const Post = (props: any) => {
             </div>
             <div className="flex flex-row space-x-4 items-center">
               <div className="flex flex-row space-x-2 items-center font-bold text-green-500">
-                ^ <p>0</p>
+                ^ <p>{props.data.upvotes.length}</p>
               </div>
               <div className="flex flex-row space-x-2 items-center font-bold text-red-500">
-                ^ <p>0</p>
+                ^ <p>{props.data.downvotes.length}</p>
               </div>
             </div>
           </div>
           <div className="flex flex-col mt-4">
             <div
-              className={`px-2 py-1 rounded-full font-bold text-xs text-center ${getCategoryColor()} w-fit`}
+              className={`px-4 py-1 rounded-full font-bold text-xs text-center ${getCategoryColor()} w-fit`}
             >
               {props.data["category"].charAt(0).toUpperCase() +
                 props.data["category"].slice(1)}
             </div>
-            <p className="font-bold text-xl">{props.data.title}</p>
-            <p className="leading-tight mt-2 grow">{props.data.content}</p>
+            <p className="font-bold my-2 text-xl">{props.data.title}</p>
+            <p className="leading-tight grow">{props.data.content}</p>
           </div>
           <div className="bg-gradient-to-r from-transparent via-gray-300 to-transparent h-[1px] mt-2" />
-          <div className="grid grid-cols-3 h-12 -mb-4 -ml-4 -mr-4">
-            <button className="hover:bg-gray-200 font-bold">Upvote</button>
-            <button className="hover:bg-gray-200 font-bold">Downvote</button>
-            <button className="hover:bg-gray-200 font-bold">Comments</button>
+          <div className="grid grid-cols-4 h-12 -mb-4 -ml-4 -mr-4">
+            <button
+              className={`flex flex-row space-x-4 items-center justify-center ${
+                voteState == "upvote"
+                  ? "bg-green-500 text-white"
+                  : "hover:bg-gray-200 text-black"
+              } transition font-bold`}
+              onClick={upvote}
+            >
+              <img src="upvote.svg" className="fill-white" />
+              <p>Upvote</p>
+            </button>
+            <button
+              className={`flex flex-row space-x-4 items-center justify-center ${
+                voteState == "downvote"
+                  ? "bg-red-500 text-white"
+                  : "hover:bg-gray-200 text-black"
+              } transition font-bold`}
+              onClick={downvote}
+            >
+              <img src="downvote.svg" className="fill-white" />
+              <p>downvote</p>
+            </button>
+            <button
+              className={`hover:bg-gray-200 font-bold`}
+              onClick={() => {
+                setShowComments(!showComments);
+              }}
+            >
+              Comments
+            </button>
+            <button
+              className={`hover:bg-gray-200 font-bold`}
+              onClick={() => {
+                shareRef.current?.select();
+                shareRef.current?.setSelectionRange(0, 99999);
+                navigator.clipboard.writeText(shareRef.current?.value!);
+                alert("Shareable link copied to clipboard.");
+              }}
+            >
+              Share
+            </button>
           </div>
+          {showComments && <Comments id={props.id} />}
         </>
       )}
       {!ownerData && (
@@ -577,6 +811,76 @@ const Post = (props: any) => {
           <p>Loading post</p>
         </motion.div>
       )}
+    </div>
+  );
+};
+
+const Comments = (props: any) => {
+  const [comments, setComments] = useState<DocumentSnapshot<DocumentData>[]>(
+    []
+  );
+  const [ready, setReady] = useState(false);
+
+  const pushToComments = (docs: DocumentSnapshot[]) => {
+    let commentsCopy = [...comments];
+    commentsCopy.push(...docs);
+    setComments(commentsCopy);
+  };
+  useEffect(() => {
+    const unsub = onSnapshot(
+      query(collection(getFirestore(), "comments/" + props.id + "/rtc")),
+      (snapshot) => {
+        let commentsToPush: DocumentSnapshot[] = snapshot.docs;
+        pushToComments(commentsToPush);
+      }
+    );
+    return () => {
+      unsub();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (comments) console.log(comments);
+  }, [comments]);
+
+  const CommentUser = (props: any) => {
+    const [user, setUser] = useState<DocumentData>();
+    useEffect(() => {
+      getDoc(doc(getFirestore(), "users/" + props.data.author_uid)).then(
+        (document) => {
+          if (document.exists()) {
+            setUser(document.data());
+          }
+        }
+      );
+    });
+
+    return (
+      <>
+        {user && (
+          <p>
+            {
+              <span className="font-bold">
+                {user.f_name + " " + user.l_name}
+              </span>
+            }
+            : {props.data.content}
+          </p>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <div className="w-full bg-gray-200 rounded mt-4 flex flex-col">
+      {comments.map((comment) => {
+        let data = comment.data();
+        return (
+          <div className="flex flex-row">
+            <CommentUser data={data} />
+          </div>
+        );
+      })}
     </div>
   );
 };
