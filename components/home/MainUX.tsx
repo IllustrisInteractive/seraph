@@ -85,6 +85,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
   const [posts, setPostsParent] = useState<DocumentSnapshot[]>();
   const [userPopupState, setUserPopup] = useState(false);
   const [profile, setProfile] = useState(false);
+  const [radius, setRadius] = useState(5);
   const [categoryFilter, setFilter] = useState<
     "incident" | "accident" | "hazard" | "crime" | undefined
   >();
@@ -425,7 +426,22 @@ export const MainUX: FunctionComponent<props> = (props) => {
           >
             Create Report
           </motion.button>
-          <p>Filter by Category</p>
+          <div className="flex flex-row">
+            <p>Filter by Category</p>
+            <div className="grow" />
+            <p className="mr-2">Show posts within:</p>
+            <select
+              onChange={(e) => {
+                setRadius(Number(e.target.value));
+              }}
+              className="rounded-lg drop-shadow"
+            >
+              <option value={5}>5 km</option>
+              <option value={10}>10 km</option>
+              <option value={20}>20 km</option>
+              <option value={50}>50 km</option>
+            </select>
+          </div>
           <motion.div className="flex flex-row space-x-4 font-bold text-black">
             <motion.button
               className={`px-4 py-2 rounded-lg ${
@@ -498,6 +514,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
                 categoryFilter={categoryFilter}
                 setNewPostModalOverrides={setNewPostModalOverrides}
                 setNewPostModal={setNewPostModal}
+                radius={radius}
               />
             </>
           )}
@@ -793,6 +810,11 @@ const Profile = (props: { user: UserModel; setProfile: Function }) => {
 const FeedManager = (props: any) => {
   const [posts, setPosts] = useState<any[]>();
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    reload();
+  }, [props.radius]);
+
   useEffect(() => {
     if (props.coordinates) {
       reload();
@@ -852,7 +874,7 @@ const FeedManager = (props: any) => {
             // accuracy, but most will match
             const distanceInKm = distanceBetween([lat, lng], props.coordinates);
             const distanceInM = distanceInKm * 1000;
-            if (distanceInM <= 50 * 1000) {
+            if (distanceInM <= props.radius * 1000) {
               document.data()["distance"] = distanceInM;
               matchingDocs.push(document);
             }
@@ -991,12 +1013,13 @@ const Post = (props: any) => {
   };
 
   useEffect(() => {
-    let distanceInM = distanceBetween(
-      [props.data.location._lat, props.data.location._long],
-      props.coordinates
-    );
+    let distanceInM =
+      distanceBetween(
+        [props.data.location._lat, props.data.location._long],
+        props.coordinates
+      ) * 1000;
 
-    if (distanceInM / 1000 < 1) {
+    if (distanceInM < 1) {
       setDistance(`${distanceInM.toPrecision(2)} m away`);
     } else {
       setDistance(`${(distanceInM / 1000).toPrecision(2)} km away`);
