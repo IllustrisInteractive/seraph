@@ -16,9 +16,19 @@ import {
   UserQuery,
 } from "../../core/firebase/Firestore";
 import { AuthenticationManager } from "../../core/firebase/Authentication";
-import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
+import {
+  GoogleMap,
+  Marker,
+  MarkerF,
+  useJsApiLoader,
+} from "@react-google-maps/api";
 import NewPostModal from "./MainUX/NewPostModal";
-import { distanceBetween, geohashQueryBounds } from "geofire-common";
+import {
+  distanceBetween,
+  geohashForLocation,
+  geohashQueryBounds,
+  Geopoint,
+} from "geofire-common";
 import {
   DocumentData,
   DocumentReference,
@@ -27,9 +37,11 @@ import {
   Query,
   QueryDocumentSnapshot,
   Unsubscribe,
+  addDoc,
   arrayRemove,
   arrayUnion,
   collection,
+  deleteDoc,
   doc,
   endAt,
   getDoc,
@@ -42,8 +54,21 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { BeatLoader, CircleLoader } from "react-spinners";
-import { getAuth } from "firebase/auth";
+import { BeatLoader, CircleLoader, MoonLoader } from "react-spinners";
+import {
+  EmailAuthProvider,
+  GoogleAuthProvider,
+  getAuth,
+  reauthenticateWithPopup,
+} from "firebase/auth";
+import {
+  StorageReference,
+  deleteObject,
+  getDownloadURL,
+  getStorage,
+  listAll,
+  ref,
+} from "firebase/storage";
 
 interface props {
   authManager: AuthenticationManager | undefined;
@@ -52,11 +77,14 @@ interface props {
 
 export const MainUX: FunctionComponent<props> = (props) => {
   const [newPostModal, setNewPostModal] = useState(false);
+  const [newPostModalOverrides, setNewPostModalOverrides] = useState<any>();
   const [coordinates, setCoordinates] = useState<[number, number]>();
   const [defaultLocation, setDefault] = useState(false);
   const [ready, setReady] = useState(false);
   const [location, setLocation] = useState();
+  const [posts, setPostsParent] = useState<DocumentSnapshot[]>();
   const [userPopupState, setUserPopup] = useState(false);
+  const [profile, setProfile] = useState(false);
   const [categoryFilter, setFilter] = useState<
     "incident" | "accident" | "hazard" | "crime" | undefined
   >();
@@ -193,6 +221,11 @@ export const MainUX: FunctionComponent<props> = (props) => {
         },
         () => {}
       );
+      let geopointLoc: Geopoint = coordinates;
+      updateDoc(doc(getFirestore(), "users/" + props.user.authUser?.uid), {
+        location: geopointLoc,
+        location_hash: geohashForLocation(geopointLoc),
+      });
       props.user.setCurrentLocation(coordinates);
     }
   }, [coordinates]);
@@ -304,8 +337,14 @@ export const MainUX: FunctionComponent<props> = (props) => {
       layout="position"
     >
       <AnimatePresence>
+        {profile && <Profile user={props.user} setProfile={setProfile} />}
+
         {newPostModal && (
-          <NewPostModal toggleModal={toggleModal} user={props.user} />
+          <NewPostModal
+            toggleModal={toggleModal}
+            user={props.user}
+            overrides={newPostModalOverrides}
+          />
         )}
       </AnimatePresence>
       <motion.div
@@ -315,9 +354,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
         transition={{ duration: 0.5, ease: "easeInOut" }}
       >
         <p className="font-bold col-span-1 text-xl text-white">SERAPH</p>
-        <div className="bg-slate-700 py-2 px-4 col-span-3 rounded-lg shadow-inner text-white">
-          Search
-        </div>
+        <div className="py-2 px-4 col-span-3 text-transparent">Search</div>
         <div className="col-span-2 flex flex-row">
           <div className="grow" />
           <div
@@ -338,23 +375,24 @@ export const MainUX: FunctionComponent<props> = (props) => {
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5, ease: easeInOut }}
         >
-          <div className=" text-2xl mt-8 space-y-10 rounded-lg flex flex-col">
-            <div className="font-bold flex flex-row space-x-6 items-center">
+          <div className=" text-2xl mt-8 space-y-2 rounded-lg flex flex-col">
+            <button className="font-bold flex flex-row space-x-6 items-center py-4 bg-transparent hover:bg-slate-100 -ml-8 pl-8 rounded-full">
               <img src="home.svg" className="h-7 w-auto" />
               <p>Home</p>
-            </div>
-            <div className="flex flex-row space-x-6 items-center">
+            </button>
+            <button className="flex flex-row space-x-6 items-center py-4 bg-transparent hover:bg-slate-100 -ml-8 pl-8 rounded-full">
               <img src="map.svg" className="h-7 w-auto" />
               <p>Live Map</p>
-            </div>
-            <div className="flex flex-row space-x-6 items-center">
+            </button>
+            <button
+              className="flex flex-row space-x-6 items-center py-4 bg-transparent hover:bg-slate-100 -ml-8 pl-8 rounded-full"
+              onClick={() => {
+                setProfile(true);
+              }}
+            >
               <img src="user-outline.svg" className="h-7 w-auto" />
               <p>Your Profile</p>
-            </div>
-            <div className="flex flex-row space-x-6 items-center">
-              <img src="cog.svg" className="h-7 w-auto" />
-              <p>Settings</p>
-            </div>
+            </button>
           </div>
           <div className="flex flex-col mt-16">
             <p className="text-xs">Your current location</p>
@@ -379,6 +417,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
           <motion.button
             className="bg-white rounded-lg p-4 shadow-lg"
             onClick={() => {
+              setNewPostModalOverrides(undefined);
               setNewPostModal(!newPostModal);
             }}
             layoutId="newPostModal"
@@ -453,9 +492,12 @@ export const MainUX: FunctionComponent<props> = (props) => {
           {coordinates && (
             <>
               <FeedManager
+                setPostsParent={setPostsParent}
                 currentUser_uid={getAuth().currentUser?.uid}
                 coordinates={coordinates}
                 categoryFilter={categoryFilter}
+                setNewPostModalOverrides={setNewPostModalOverrides}
+                setNewPostModal={setNewPostModal}
               />
             </>
           )}
@@ -502,16 +544,247 @@ export const MainUX: FunctionComponent<props> = (props) => {
                 onLoad={onLoad}
                 onUnmount={onUnmount}
               >
-                {/* Child components, such as markers, info windows, etc. */}
-                <></>
+                {posts?.map((doc) => {
+                  return (
+                    <MarkerF
+                      label={doc.data()!.title}
+                      position={
+                        new google.maps.LatLng(
+                          doc.data()!.location["_lat"],
+                          doc.data()!.location["_long"]
+                        )
+                      }
+                    />
+                  );
+                })}
               </GoogleMap>
             )}
             <div className="absolute bottom-0 bg-gradient-to-t from-gray-700 to-transparent h-1/6 p-4 text-white font-light w-full">
-              There are <span className="font-bold">0</span> reports in your
-              area
+              There are <span className="font-bold">{posts?.length}</span>{" "}
+              reports in your area
             </div>
           </div>
         </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+const Profile = (props: { user: UserModel; setProfile: Function }) => {
+  const [ready, setReady] = useState(false);
+  const [profileURL, setProfile] = useState<string>();
+  const [profilePicture, setProfilePicture] = useState<File>();
+  const [f_name, setFName] = useState<string>();
+  const [l_name, setLName] = useState<string>();
+  const profileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (props.user.profilePicture) {
+      let profileRef = ref(
+        getStorage(),
+        props.user.authUser?.uid + "/" + props.user.profilePicture
+      );
+      getDownloadURL(profileRef).then((url) => {
+        setProfile(url);
+        setReady(true);
+      });
+    } else {
+      setReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (ready) {
+      setFName(props.user._fName);
+      setLName(props.user._lName);
+    }
+  }, [ready]);
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.5, ease: "easeInOut" }}
+      className="h-screen w-screen fixed flex flex-col justify-center items-center z-50 bg-black bg-opacity-20 p-16"
+    >
+      <motion.div
+        initial={{ y: "50vh" }}
+        animate={{ y: 0 }}
+        exit={{ y: "50vh" }}
+        transition={{ duration: 0.5, ease: "easeInOut" }}
+        className="bg-slate-100 p-8 rounded-xl drop-shadow-lg h-full w-1/2 flex flex-col"
+      >
+        <div className="relative h-8">
+          <button
+            className="absolute right-0 h-full"
+            onClick={() => {
+              props.setProfile(false);
+            }}
+          >
+            <img src="close.svg" className="h-full w-auto" />
+          </button>
+        </div>
+        <AnimatePresence>
+          {ready ? (
+            <>
+              <div className="h-48 w-48 grow-0 bg-black rounded-full self-center relative overflow-hidden group">
+                <input
+                  type="file"
+                  className="hidden"
+                  ref={profileRef}
+                  accept="images/*"
+                  onChange={(e) => {
+                    if (e.target.files) {
+                      setProfilePicture(e.target.files[0]);
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    profileRef.current?.click();
+                  }}
+                  className="absolute top-0 flex items-center justify-center h-full w-full bg-transparent text-transparent group-hover:bg-black group-hover:bg-opacity-25 group-hover:text-white font-bold"
+                >
+                  Update Picture
+                </button>
+                {profileURL && (
+                  <img src={profileURL} className="h-full w-auto" />
+                )}
+                {!profileURL && profilePicture && (
+                  <img
+                    src={URL.createObjectURL(profilePicture)}
+                    className="h-full w-full"
+                  />
+                )}
+              </div>
+              <p className="text-2xl font-bold self-center py-2">
+                {props.user.getFullName()}
+              </p>
+              {props.user.phoneNumber ? (
+                <div className="self-center">
+                  <p className="bg-green-700 text-white px-4 py-1 font-bold rounded-lg">
+                    Verified
+                  </p>
+                </div>
+              ) : (
+                <div className="self-center">
+                  <p className="bg-yellow-600 text-white px-4 py-1 font-bold rounded-lg">
+                    Unverified
+                  </p>
+                </div>
+              )}
+              <div className="grow grid grid-cols-3 grid-rows-6 gap-y-2 mt-4">
+                <div className="col-span-1 row-span-1 font-bold">
+                  Login Information
+                </div>
+                <div className="col-span-2 row-span-1 flex flex-col">
+                  <p>
+                    {props.user.authUser?.providerId == "firebase"
+                      ? "Logged in via Firebase (Google Account)"
+                      : "Logged in via Email"}
+                  </p>
+                  <p>{props.user.authUser?.email}</p>
+                </div>
+                <div className="col-span-1 row-span-3 font-bold">
+                  Basic Information
+                </div>
+                <div className="col-span-2 row-span-3 flex flex-col">
+                  <div className="bg-yellow-400 text-black rounded-lg p-4">
+                    For security reasons, the name you registered with, as well
+                    as any name changes you perform in the future, will be
+                    logged in our database.{" "}
+                    <b>Please make sure to use your real name.</b>
+                  </div>
+                  <div className="grid grid-cols-2 space-y-2">
+                    <label className="mt-2">First Name</label>
+                    <label>Last Name</label>
+                    <input
+                      className="p-2 mr-2 rounded-lg bg-white shadow-inner"
+                      value={f_name}
+                    />
+                    <input
+                      className="p-2 rounded-lg bg-white shadow-inner"
+                      value={l_name}
+                    />
+                  </div>
+                </div>
+                <div className="col-span-1 row-span-1 font-bold">
+                  Account Actions
+                </div>
+                <div className="col-span-2 row-span-1">
+                  <div className="flex flex-row space-x-4">
+                    <button
+                      onClick={() => {
+                        deleteDoc(
+                          doc(
+                            getFirestore(),
+                            "users/" + props.user.authUser?.uid
+                          )
+                        ).then(() => {
+                          if (props.user.authUser?.providerId == "firebase") {
+                            reauthenticateWithPopup(
+                              props.user.authUser!,
+                              new GoogleAuthProvider()
+                            ).then((user) => {
+                              user.user.delete();
+                              window.location.reload();
+                            });
+                          } else {
+                            reauthenticateWithPopup(
+                              props.user.authUser!,
+                              new EmailAuthProvider()
+                            ).then((user) => {
+                              user.user.delete();
+                              window.location.reload();
+                            });
+                          }
+                        });
+                      }}
+                      className="rounded-lg px-4 py-2 text-white font-bold bg-red-700"
+                    >
+                      Delete Account
+                    </button>
+                    <button
+                      onClick={() => {
+                        deleteDoc(
+                          doc(
+                            getFirestore(),
+                            "users/" + props.user.authUser?.uid
+                          )
+                        ).then(() => {
+                          window.location.reload();
+                        });
+                      }}
+                      className="rounded-lg px-4 py-2 text-white font-bold bg-orange-500"
+                    >
+                      Reset Account
+                    </button>
+                  </div>
+                </div>
+                <div className="col-span-3 row-span-1 grid grid-cols-2 space-x-4">
+                  <button className="text-white font-bold rounded-lg drop-shadow bg-blue-600">
+                    Save Changes
+                  </button>
+                  <button
+                    onClick={() => {
+                      props.setProfile(false);
+                    }}
+                    className="text-black font-bold rounded-lg drop-shadow bg-gray-200"
+                  >
+                    Discard Changes
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <motion.div
+              exit={{ opacity: 0 }}
+              className="grow flex flex-col space-y-4 items-center justify-center"
+            >
+              <MoonLoader />
+              <p className="text-xl">Loading your profile</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   );
@@ -525,6 +798,12 @@ const FeedManager = (props: any) => {
       reload();
     }
   }, [props.coordinates, props.categoryFilter]);
+
+  useEffect(() => {
+    posts?.forEach((post) => {
+      console.log(post.data());
+    });
+  }, [posts]);
 
   const reload = () => {
     setLoading(true);
@@ -585,11 +864,12 @@ const FeedManager = (props: any) => {
       .then((matchingDocs) => {
         setLoading(false);
         setPosts(matchingDocs);
+        props.setPostsParent(matchingDocs);
       });
   };
 
   return (
-    <motion.div className="w-full flex flex-col items-center">
+    <motion.div className="overflow-y-scroll h-0 grow flex flex-col items-center no-scrollbar">
       {loading && (
         <>
           <CircleLoader className="mb-4" /> <p>Now loading your feed</p>
@@ -604,6 +884,48 @@ const FeedManager = (props: any) => {
               currentUser_uid={props.currentUser_uid}
               data={postData.data()}
               id={postData.id}
+              coordinates={props.coordinates}
+              remove={() => {
+                deleteDoc(doc(getFirestore(), "posts/" + postData.id)).then(
+                  () => {
+                    const mediaRef = ref(getStorage(), postData.id);
+                    if (postData.data().media) {
+                      listAll(mediaRef).then((list) => {
+                        let promises: Promise<void>[] = [];
+                        list.items.forEach((item) => {
+                          promises.push(deleteObject(item));
+                        });
+
+                        Promise.all(promises).then(() => {
+                          let postsCopy = [...posts];
+                          postsCopy.splice(idx, 1);
+                          setPosts(postsCopy);
+                          reload();
+                        });
+                      });
+                    } else {
+                      let postsCopy = [...posts];
+                      postsCopy.splice(idx, 1);
+                      setPosts(postsCopy);
+                      reload();
+                    }
+                  }
+                );
+              }}
+              edit={() => {
+                props.setNewPostModalOverrides({
+                  title: postData.data().title,
+                  content: postData.data().content,
+                  category: postData.data().category,
+                  id: postData.id,
+                  replace(data: DocumentSnapshot<DocumentData>) {
+                    let postsCopy = [...posts];
+                    postsCopy.splice(idx, 1, data);
+                    setPosts(postsCopy);
+                  },
+                });
+                props.setNewPostModal(true);
+              }}
             />
           );
         })}
@@ -616,12 +938,82 @@ const FeedManager = (props: any) => {
   );
 };
 
+interface MediaContentProps {
+  url: string;
+}
+
+const MediaContent: FunctionComponent<MediaContentProps> = (props) => {
+  const [image, setImage] = useState<any>();
+  const [video, setVideo] = useState<any>();
+
+  const substrings = ["jpg", "png", "webp", "JPG", "PNG", "WEBP"];
+  useEffect(() => {
+    if (substrings.some((v) => props.url.includes(v))) {
+      setImage(true);
+    } else {
+      setVideo(true);
+    }
+  }, []);
+
+  if (image) {
+    return <img src={props.url} className="h-64 w-auto" />;
+  } else if (video) {
+    return (
+      <video controls className="h-64 w-auto">
+        <source src={props.url} />
+      </video>
+    );
+  }
+  return <></>;
+};
+
 const Post = (props: any) => {
   const [ownerData, setOwner] = useState<DocumentData | undefined>();
   const [voteState, setVote] = useState<"upvote" | "downvote" | "none">("none");
   const [showComments, setShowComments] = useState(false);
+  const [commentVerified, setCommentVerified] = useState(false);
+  const [media, setMedia] = useState<string[]>();
+  const [distance, setDistance] = useState<string>();
+  const [upvotes, setUpvotes] = useState(0);
+  const [downvotes, setDownvotes] = useState(0);
 
   const shareRef = useRef<HTMLInputElement>(null);
+  const commentRef = useRef<any>();
+
+  const handleSubmit = () => {
+    addDoc(collection(getFirestore(), `comments/${props.id}/rtc`), {
+      author_uid: props.currentUser_uid,
+      content: commentRef.current.value,
+      timestamp: Date.now(),
+    }).then(() => {
+      commentRef.current.value = "";
+    });
+  };
+
+  useEffect(() => {
+    let distanceInM = distanceBetween(
+      [props.data.location._lat, props.data.location._long],
+      props.coordinates
+    );
+
+    if (distanceInM / 1000 < 1) {
+      setDistance(`${distanceInM.toPrecision(2)} m away`);
+    } else {
+      setDistance(`${(distanceInM / 1000).toPrecision(2)} km away`);
+    }
+
+    setUpvotes(props.data.upvotes.length);
+    setDownvotes(props.data.downvotes.length);
+  }, []);
+
+  const handleComment = (e: any) => {
+    let comment: string = e.target.value;
+    if (comment.replaceAll(" ", "").length > 0) {
+      setCommentVerified(true);
+    } else {
+      setCommentVerified(false);
+    }
+  };
 
   const timeDifferenceString = () => {
     let time = Date.now() - props.data.timestamp;
@@ -668,6 +1060,18 @@ const Post = (props: any) => {
       }
       setOwner(userDoc);
     });
+
+    if (props.data["media"]) {
+      const mediaRef = ref(getStorage(), props.id);
+      listAll(mediaRef).then((list) => {
+        let promises: Promise<string>[] = [];
+        list.items.forEach((item) => {
+          promises.push(getDownloadURL(item));
+        });
+
+        Promise.all(promises).then((values) => setMedia(values));
+      });
+    }
   }, []);
 
   const getCategoryColor = () => {
@@ -687,11 +1091,13 @@ const Post = (props: any) => {
 
   const upvote = () => {
     if (voteState == "upvote") {
+      setUpvotes(upvotes - 1);
       setVote("none");
       updateDoc(doc(getFirestore(), "posts/" + props.id), {
         upvotes: arrayRemove(props.currentUser_uid),
       });
     } else {
+      setUpvotes(upvotes + 1);
       setVote("upvote");
       updateDoc(doc(getFirestore(), "posts/" + props.id), {
         downvotes: arrayRemove(props.currentUser_uid),
@@ -702,11 +1108,13 @@ const Post = (props: any) => {
 
   const downvote = () => {
     if (voteState == "downvote") {
+      setDownvotes(downvotes - 1);
       updateDoc(doc(getFirestore(), "posts/" + props.id), {
         downvotes: arrayRemove(props.currentUser_uid),
       });
       setVote("none");
     } else {
+      setDownvotes(downvotes + 1);
       updateDoc(doc(getFirestore(), "posts/" + props.id), {
         upvotes: arrayRemove(props.currentUser_uid),
         downvotes: arrayUnion(props.currentUser_uid),
@@ -716,7 +1124,10 @@ const Post = (props: any) => {
   };
 
   return (
-    <div className="bg-white w-full rounded-lg shadow-lg p-4 mb-4 flex flex-col overflow-hidden">
+    <div
+      key={props.id}
+      className="bg-white w-full rounded-lg shadow-lg p-4 mb-4 flex flex-col"
+    >
       {ownerData && (
         <>
           <input
@@ -724,10 +1135,32 @@ const Post = (props: any) => {
             type="text"
             ref={shareRef}
             value={"http://localhost:3000/report/" + props.id}
+            readOnly
           />
-          <div className="flex flex-row space-x-2">
+          <div className="flex flex-row space-x-2 relative items-center">
             {" "}
             {/** Post component header */}
+            {props.currentUser_uid == props.data.owner_uid && (
+              <div className="absolute right-0 flex flex-row justify-center space-x-2">
+                <button className="h-6" onClick={props.edit}>
+                  <img src="edit.svg" className="h-full w-auto" />
+                </button>
+                <button
+                  className="h-6"
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "Are you sure you want to delete this post titled " +
+                          props.data.title
+                      )
+                    )
+                      props.remove();
+                  }}
+                >
+                  <img src="delete.svg" className="h-full w-auto" />
+                </button>
+              </div>
+            )}
             <div className="h-9 w-9 rounded-full bg-black">
               {/** Profile picture placeholder */}
             </div>
@@ -736,16 +1169,8 @@ const Post = (props: any) => {
                 {`${ownerData["f_name"]} ${ownerData["l_name"]}`}
               </p>
               <p className="font-bold text-gray-400 text-xs">
-                {timeDifferenceString()} - {props.data.distance / 1000} km away
+                {timeDifferenceString()} - {distance}
               </p>
-            </div>
-            <div className="flex flex-row space-x-4 items-center">
-              <div className="flex flex-row space-x-2 items-center font-bold text-green-500">
-                ^ <p>{props.data.upvotes.length}</p>
-              </div>
-              <div className="flex flex-row space-x-2 items-center font-bold text-red-500">
-                ^ <p>{props.data.downvotes.length}</p>
-              </div>
             </div>
           </div>
           <div className="flex flex-col mt-4">
@@ -757,6 +1182,12 @@ const Post = (props: any) => {
             </div>
             <p className="font-bold my-2 text-xl">{props.data.title}</p>
             <p className="leading-tight grow">{props.data.content}</p>
+            <div className="w-full mt-4 flex flex-row flex-wrap">
+              {media &&
+                media.map((mediaContent) => {
+                  return <MediaContent url={mediaContent} />;
+                })}
+            </div>
           </div>
           <div className="bg-gradient-to-r from-transparent via-gray-300 to-transparent h-[1px] mt-2" />
           <div className="grid grid-cols-4 h-12 -mb-4 -ml-4 -mr-4">
@@ -770,6 +1201,7 @@ const Post = (props: any) => {
             >
               <img src="upvote.svg" className="fill-white" />
               <p>Upvote</p>
+              <p className="px-1 rounded-full bg-white text-black">{upvotes}</p>
             </button>
             <button
               className={`flex flex-row space-x-4 items-center justify-center ${
@@ -780,7 +1212,10 @@ const Post = (props: any) => {
               onClick={downvote}
             >
               <img src="downvote.svg" className="fill-white" />
-              <p>downvote</p>
+              <p>Downvote</p>
+              <p className="px-1 rounded-full bg-white text-black">
+                {downvotes}
+              </p>
             </button>
             <button
               className={`hover:bg-gray-200 font-bold`}
@@ -802,7 +1237,27 @@ const Post = (props: any) => {
               Share
             </button>
           </div>
-          {showComments && <Comments id={props.id} />}
+          {showComments && (
+            <>
+              <Comments id={props.id} />
+              <div className="mt-2 relative">
+                <input
+                  className="bg-gray-300 shadow-inner rounded py-2 px-4 w-full"
+                  onChange={handleComment}
+                  placeholder="Write a comment"
+                  ref={commentRef}
+                />
+                {commentVerified && (
+                  <button
+                    onClick={handleSubmit}
+                    className="px-4 rounded bg-blue-600 hover:bg-blue-400 font-bold text-white transition shadow absolute top-2 right-2"
+                  >
+                    Send
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </>
       )}
       {!ownerData && (
@@ -828,7 +1283,10 @@ const Comments = (props: any) => {
   };
   useEffect(() => {
     const unsub = onSnapshot(
-      query(collection(getFirestore(), "comments/" + props.id + "/rtc")),
+      query(
+        collection(getFirestore(), "comments/" + props.id + "/rtc"),
+        orderBy("timestamp", "asc")
+      ),
       (snapshot) => {
         let commentsToPush: DocumentSnapshot[] = snapshot.docs;
         pushToComments(commentsToPush);
@@ -839,45 +1297,13 @@ const Comments = (props: any) => {
     };
   }, []);
 
-  useEffect(() => {
-    if (comments) console.log(comments);
-  }, [comments]);
-
-  const CommentUser = (props: any) => {
-    const [user, setUser] = useState<DocumentData>();
-    useEffect(() => {
-      getDoc(doc(getFirestore(), "users/" + props.data.author_uid)).then(
-        (document) => {
-          if (document.exists()) {
-            setUser(document.data());
-          }
-        }
-      );
-    });
-
-    return (
-      <>
-        {user && (
-          <p>
-            {
-              <span className="font-bold">
-                {user.f_name + " " + user.l_name}
-              </span>
-            }
-            : {props.data.content}
-          </p>
-        )}
-      </>
-    );
-  };
-
   return (
-    <div className="w-full bg-gray-200 rounded mt-4 flex flex-col">
+    <div className="w-full bg-gray-200 max-h-[400px] rounded mt-6 px-4 py-2 flex flex-col">
       {comments.map((comment) => {
         let data = comment.data();
         return (
-          <div className="flex flex-row">
-            <CommentUser data={data} />
+          <div key={comment.id} className="flex flex-row">
+            <CommentUser key={comment.id} data={data} />
           </div>
         );
       })}
@@ -885,46 +1311,28 @@ const Comments = (props: any) => {
   );
 };
 
-export default MainUX;
+const CommentUser = (props: any) => {
+  const [user, setUser] = useState<DocumentData>();
+  useEffect(() => {
+    getDoc(doc(getFirestore(), "users/" + props.data.author_uid)).then(
+      (document) => {
+        if (document.exists()) {
+          setUser(document.data());
+        }
+      }
+    );
+  }, []);
 
-<div className="bg-white rounded-lg shadow-lg p-4 flex flex-col overflow-hidden">
-  <div className="flex flex-row space-x-2">
-    {" "}
-    {/** Post component header */}
-    <div className="h-9 w-9 rounded-full bg-black">
-      {/** Profile picture placeholder */}
-    </div>
-    <div className="flex flex-col h-9 grow">
-      <p className="font-bold text-sm">Test Account</p>
-      <p className="font-bold text-gray-400 text-xs">2h - 0.3km away</p>
-    </div>
-    <div className="flex flex-row space-x-4 items-center">
-      <div className="flex flex-row space-x-2 items-center font-bold text-green-500">
-        ^ <p>0</p>
-      </div>
-      <div className="flex flex-row space-x-2 items-center font-bold text-red-500">
-        ^ <p>0</p>
-      </div>
-    </div>
-  </div>
-  <div className="flex flex-col mt-4">
-    <div className="px-2 py-1 rounded-full font-bold text-xs text-center text-white bg-orange-400 w-fit">
-      Hazard
-    </div>
-    <p className="font-bold text-xl">
-      Heavy construction work along Nia Rd., Carsadang Bago.
-    </p>
-    <p className="leading-tight mt-2">
-      Caption here. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-      Praesent placerat metus ac consequat elementum. Aenean tincidunt ut elit
-      vitae porttitor. Nulla quam nulla, gravida nec velit non, tristique ornare
-      diam.
-    </p>
-  </div>
-  <div className="bg-gradient-to-r from-transparent via-gray-300 to-transparent h-[1px] mt-2" />
-  <div className="grid grid-cols-3 h-12 -mb-4 -ml-4 -mr-4">
-    <button className="hover:bg-gray-200 font-bold">Upvote</button>
-    <button className="hover:bg-gray-200 font-bold">Downvote</button>
-    <button className="hover:bg-gray-200 font-bold">Comments</button>
-  </div>
-</div>;
+  return (
+    <>
+      {user && (
+        <p>
+          {<span className="font-bold">{user.f_name + " " + user.l_name}</span>}
+          : {props.data.content}
+        </p>
+      )}
+    </>
+  );
+};
+
+export default MainUX;

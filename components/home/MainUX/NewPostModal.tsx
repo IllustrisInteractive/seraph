@@ -13,19 +13,23 @@ import {
   Query,
   QueryDocumentSnapshot,
   collection,
+  doc,
   endAt,
+  getDoc,
   getDocs,
   getFirestore,
   orderBy,
   query,
   startAt,
+  updateDoc,
   where,
 } from "firebase/firestore";
-import { distanceBetween, geohashQueryBounds } from "geofire-common";
+import { distanceBetween, geohashQueryBounds, Geopoint } from "geofire-common";
 
 interface NewPostModalProps {
   toggleModal: Function;
   user: UserModel;
+  overrides: any;
 }
 
 const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
@@ -38,6 +42,8 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
   const reportTitleRef = useRef<HTMLInputElement>(null);
   const reportContentRef = useRef<any>();
   const [loading, setLoading] = useState(false);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
 
   const removeMedia = (idx: number) => {
     if (filesSelected) {
@@ -50,7 +56,7 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
   };
 
   const handleSubmit = () => {
-    if (category && reportTitleRef.current?.value) {
+    if (category && reportTitleRef.current?.value && !props.overrides) {
       setLoading(true);
       let reportToUpload: Report = {
         title: reportTitleRef.current?.value,
@@ -69,15 +75,18 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
       controller.uploadReport(
         reportToUpload,
         props.user.authUser!,
-        (coordinates, doc_id) => {
+        (coordinatesRaw, doc_id) => {
+          const coordinates: Geopoint = [
+            coordinatesRaw["_lat"],
+            coordinatesRaw["_long"],
+          ];
           const bounds = geohashQueryBounds(coordinates, 50 * 1000);
           const promises = [];
           let q: Query;
           for (const b of bounds) {
             q = query(
-              collection(getFirestore(), "posts"),
+              collection(getFirestore(), "users"),
               orderBy("location_hash"),
-              orderBy("timestamp", "desc"),
 
               startAt(b[0]),
               endAt(b[1])
@@ -91,8 +100,8 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
 
               for (const snap of snapshots) {
                 for (const document of snap.docs) {
-                  const lat = document.data()["location"]["_lat"];
-                  const lng = document.data()["location"]["_long"];
+                  const lat = document.data()["location"][0];
+                  const lng = document.data()["location"][1];
 
                   // We have to filter out a few false positives due to GeoHash
                   // accuracy, but most will match
@@ -108,15 +117,36 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
               return matchingDocs;
             })
             .then((matchingDocs: QueryDocumentSnapshot<DocumentData>[]) => {
+              console.log(matchingDocs.length);
               matchingDocs.forEach((document) => {
-                if (document.data()["phone_number"]) {
+                let userData = document.data();
+                if (userData["phone_number"]) {
+                  fetch(
+                    `http://localhost:3000/api/sendMsg/${userData.uid}?f_name=${userData.f_name}&category=${reportToUpload.category}&post_id=${doc_id}&number=${userData["phone_number"]}`
+                  ).then(() => {
+                    props.toggleModal();
+                  });
+                } else {
+                  props.toggleModal();
                 }
               });
-              props.toggleModal();
             });
         },
         filesSelected
       );
+    } else if (props.overrides) {
+      updateDoc(doc(getFirestore(), "posts/" + props.overrides.id), {
+        title: title,
+        content: content,
+        category: category,
+      }).then((data) => {
+        getDoc(doc(getFirestore(), "posts/" + props.overrides.id)).then(
+          (document) => {
+            props.overrides.replace(document);
+            props.toggleModal();
+          }
+        );
+      });
     }
   };
 
@@ -139,9 +169,25 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
   };
 
   useEffect(() => {
-    if (category) setPostVerified(true);
+    if (props.overrides) {
+      setCategory(props.overrides.category);
+      setTitle(props.overrides.title);
+      setContent(props.overrides.content);
+    }
+  }, []);
+
+  const handleTitle = (e: any) => {
+    setTitle(e.target.value);
+  };
+
+  const handleContent = (e: any) => {
+    setContent(e.target.value);
+  };
+
+  useEffect(() => {
+    if (category && title != "" && content != "") setPostVerified(true);
     else setPostVerified(false);
-  }, [category]);
+  }, [category, title, content]);
 
   interface MediaContentProps {
     file: File;
@@ -185,17 +231,19 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
         <motion.div
           layout="position"
           layoutId={category}
-          className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-orange-400 text-white items-center space-x-2"
+          className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-black text-white items-center space-x-2"
         >
           <p>Incident</p>
-          <button
-            className="text-orange-400 rounded-full bg-white h-4 w-4 flex justify-center items-center"
-            onClick={() => {
-              setCategory(undefined);
-            }}
-          >
-            x
-          </button>
+          {!props.overrides && (
+            <button
+              className="text-orange-400 rounded-full bg-white h-4 w-4 flex justify-center items-center"
+              onClick={() => {
+                setCategory(undefined);
+              }}
+            >
+              <img src="close.svg" />
+            </button>
+          )}
         </motion.div>
       );
     if (props.category == "accident")
@@ -203,17 +251,19 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
         <motion.div
           layout="position"
           layoutId={category}
-          className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-orange-400 text-white items-center space-x-2"
+          className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-yellow-300 text-black items-center space-x-2"
         >
           <p>Accident</p>
-          <button
-            className="text-orange-400 rounded-full bg-white h-4 w-4 flex justify-center items-center"
-            onClick={() => {
-              setCategory(undefined);
-            }}
-          >
-            x
-          </button>
+          {!props.overrides && (
+            <button
+              className="text-orange-400 rounded-full bg-white h-4 w-4 flex justify-center items-center"
+              onClick={() => {
+                setCategory(undefined);
+              }}
+            >
+              <img src="close.svg" />
+            </button>
+          )}
         </motion.div>
       );
     if (props.category == "crime")
@@ -224,14 +274,16 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
           className="flex flex-row text-sm font-bold items-center px-4 py-1 space-x-2 w-fit rounded-full bg-red-600 text-white"
         >
           <p>Crime</p>
-          <button
-            className="text-red-600 rounded-full bg-white h-4 w-4 flex justify-center items-center"
-            onClick={() => {
-              setCategory(undefined);
-            }}
-          >
-            x
-          </button>
+          {!props.overrides && (
+            <button
+              className="text-red-600 rounded-full bg-white h-4 w-4 flex justify-center items-center"
+              onClick={() => {
+                setCategory(undefined);
+              }}
+            >
+              <img src="close.svg" />
+            </button>
+          )}
         </motion.div>
       );
     if (props.category == "hazard")
@@ -242,14 +294,16 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
           className="flex flex-row text-sm font-bold px-4 py-1 w-fit rounded-full bg-orange-400 text-white items-center space-x-2"
         >
           <p>Hazard</p>
-          <button
-            className="text-orange-400 rounded-full bg-white h-4 w-4 flex justify-center items-center"
-            onClick={() => {
-              setCategory(undefined);
-            }}
-          >
-            x
-          </button>
+          {!props.overrides && (
+            <button
+              className="text-orange-400 rounded-full bg-white h-4 w-4 flex justify-center items-center"
+              onClick={() => {
+                setCategory(undefined);
+              }}
+            >
+              <img src="close.svg" />
+            </button>
+          )}
         </motion.div>
       );
     return null;
@@ -268,7 +322,9 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
           </motion.div>
         )}
         <motion.div className="relative flex flex-row justify-center items-center w-full">
-          <p className="text-xl font-bold text-center py-4">Create Report</p>
+          <p className="text-xl font-bold text-center py-4">
+            {props.overrides ? "Edit Report" : "Create Report"}
+          </p>
           <button
             onClick={() => {
               props.toggleModal();
@@ -284,25 +340,31 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
           layoutId={category}
         >
           <AnimatePresence>
-            {category && <CategoryTag category={category} />}
+            {category && (
+              <CategoryTag category={category} overrides={props.overrides} />
+            )}
           </AnimatePresence>
           <motion.div className="flex flex-row">
             <motion.div className="flex flex-col grow">
               <input
+                onChange={handleTitle}
                 ref={reportTitleRef}
                 placeholder="Give your report a title"
                 className="bg-transparent outline-none"
+                value={title}
               />
 
               <TextareaAutosize
+                onChange={handleContent}
                 ref={reportContentRef}
                 maxRows={8}
                 placeholder="Write some details about your report"
                 className="mb-8 bg-transparent outline-none font-normal"
+                value={content}
               />
             </motion.div>
             <motion.div>
-              {!filesSelected && (
+              {!filesSelected && !props.overrides && (
                 <motion.button
                   layout="position"
                   layoutId="files"
@@ -313,7 +375,7 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
                 >
                   <img src="squares-plus.svg" className="h-8 w-8" />
                   <input
-                    accept="audio/*,video/*,image/*"
+                    accept=".jpg,.png,.webp,video/*"
                     type="file"
                     multiple
                     onChange={handleFileInput}

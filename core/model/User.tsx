@@ -8,12 +8,12 @@ import { where } from "firebase/firestore";
 import { ImageAsset, StorageController } from "../firebase/Storage";
 
 export class UserModel {
-  private _fName: string | undefined = undefined;
+  _fName: string | undefined = undefined;
   public get fName(): string | undefined {
     if (!this.fName) throw new Error("UserModel is not yet ready.");
     else return this._fName;
   }
-  private _lName: string | undefined = undefined;
+  _lName: string | undefined = undefined;
   public get lName(): string | undefined {
     if (!this.lName) throw new Error("UserModel is not yet ready.");
     else return this._lName;
@@ -28,7 +28,7 @@ export class UserModel {
   private _profilePicture: ImageAsset | undefined = undefined;
   public get profilePicture(): ImageAsset | undefined {
     if (!this._profilePicture) return undefined;
-    else return this.profilePicture;
+    else return undefined;
   }
 
   private _defaultLocation: [number, number];

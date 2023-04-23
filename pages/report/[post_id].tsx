@@ -14,7 +14,12 @@ import {
 } from "firebase/firestore";
 import { Geocoder } from "../../core/maps/geocoding";
 import Head from "next/head";
-import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
+import {
+  GoogleMap,
+  Marker,
+  MarkerF,
+  useJsApiLoader,
+} from "@react-google-maps/api";
 
 const DedicatedReportPage = () => {
   const [comments, setComments] = useState<DocumentSnapshot<DocumentData>[]>(
@@ -127,9 +132,24 @@ const DedicatedReportPage = () => {
     );
   };
 
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case "hazard":
+        return "bg-orange-400 text-white";
+      case "accident":
+        return "bg-yellow-300 text-black";
+      case "incident":
+        return "bg-black text-white";
+      case "crime":
+        return "bg-red-400 text-white";
+      default:
+        break;
+    }
+  };
+
   return (
     <div className="bg-blue-200 p-16 h-screen w-screen flex flex-col justify-center items-center">
-      {owner && location && coordinates && comments && comments.length > 0 ? (
+      {owner && location && coordinates && comments ? (
         <div className="bg-gray-50 grow w-full rounded-lg drop-shadow-lg grid grid-cols-2 overflow-hidden">
           <div className="bg-black" />
           <div className="flex flex-col p-8">
@@ -139,7 +159,16 @@ const DedicatedReportPage = () => {
                 Sign up now.
               </a>
             </div>
-            <p className="text-4xl mt-8 font-bold">{post!.title}</p>
+            <div className="text-4xl mt-8 font-bold space-x-2 flex flex-row items-center">
+              <p className="">{post!.title} </p>
+              <span
+                className={`${getCategoryColor(
+                  post!.category
+                )} px-4 py-1 text-lg rounded-full`}
+              >
+                {post!.category}
+              </span>
+            </div>
             <div className="flex flex-row space-x-2 items-center">
               <p className="font-light">Posted by </p>
 
@@ -151,7 +180,9 @@ const DedicatedReportPage = () => {
               ) : (
                 <div className="h-4 w-4 rounded-full bg-black" />
               )}
-              <p className="font-bold">{owner!.f_name + " " + owner!.l_name}</p>
+              <p className="font-bold">
+                {owner!.f_name + " " + owner!.l_name}{" "}
+              </p>
             </div>
             <p className="text-lg my-8 grow">{post!.content}</p>
             <div className="h-1/2 grid grid-cols-2 w-full gap-x-4">
@@ -179,7 +210,14 @@ const DedicatedReportPage = () => {
                   onUnmount={onUnmount}
                 >
                   {/* Child components, such as markers, info windows, etc. */}
-                  <></>
+                  <MarkerF
+                    position={
+                      new google.maps.LatLng(
+                        post!["location"].latitude,
+                        post!["location"].longitude
+                      )
+                    }
+                  />
                 </GoogleMap>
               )}
             </div>
