@@ -695,7 +695,7 @@ const Profile = (props: { user: UserModel; setProfile: Function }) => {
                 </div>
                 <div className="col-span-2 row-span-1 flex flex-col">
                   <p>
-                    {props.user.authUser?.providerId == "firebase"
+                    {props.user.authUser?.displayName
                       ? "Logged in via Firebase (Google Account)"
                       : "Logged in via Email"}
                   </p>
@@ -715,10 +715,16 @@ const Profile = (props: { user: UserModel; setProfile: Function }) => {
                     <label className="mt-2">First Name</label>
                     <label>Last Name</label>
                     <input
+                      onChange={(e) => {
+                        setFName(e.target.value);
+                      }}
                       className="p-2 mr-2 rounded-lg bg-white shadow-inner"
                       value={f_name}
                     />
                     <input
+                      onChange={(e) => {
+                        setLName(e.target.value);
+                      }}
                       className="p-2 rounded-lg bg-white shadow-inner"
                       value={l_name}
                     />
@@ -731,30 +737,34 @@ const Profile = (props: { user: UserModel; setProfile: Function }) => {
                   <div className="flex flex-row space-x-4">
                     <button
                       onClick={() => {
-                        deleteDoc(
-                          doc(
-                            getFirestore(),
-                            "users/" + props.user.authUser?.uid
+                        if (props.user.authUser?.displayName) {
+                          reauthenticateWithPopup(
+                            props.user.authUser!,
+                            new GoogleAuthProvider()
                           )
-                        ).then(() => {
-                          if (props.user.authUser?.providerId == "firebase") {
-                            reauthenticateWithPopup(
-                              props.user.authUser!,
-                              new GoogleAuthProvider()
-                            ).then((user) => {
-                              user.user.delete();
-                              window.location.reload();
+                            .catch(() => {
+                              alert(
+                                "The Google Account you selected does not match the Google account linked to your SERAPH account."
+                              );
+                            })
+                            .then((user) => {
+                              if (user) {
+                                user.user.delete().then(() => {
+                                  deleteDoc(
+                                    doc(
+                                      getFirestore(),
+                                      "users/" + props.user.authUser?.uid
+                                    )
+                                  );
+                                  window.location.reload();
+                                });
+                              }
                             });
-                          } else {
-                            reauthenticateWithPopup(
-                              props.user.authUser!,
-                              new EmailAuthProvider()
-                            ).then((user) => {
-                              user.user.delete();
-                              window.location.reload();
-                            });
-                          }
-                        });
+                        } else {
+                          window.location.assign(
+                            `/account?delete=true&email=${props.user.authUser?.email}`
+                          );
+                        }
                       }}
                       className="rounded-lg px-4 py-2 text-white font-bold bg-red-700"
                     >

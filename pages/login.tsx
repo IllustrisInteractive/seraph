@@ -167,14 +167,6 @@ const SignInPage: FunctionComponent = () => {
           </motion.p>
 
           <motion.div className="h-8" />
-          <motion.a
-            className="cursor-pointer"
-            onClick={() => {
-              router.replace("/");
-            }}
-          >
-            Return to Home Page
-          </motion.a>
         </motion.div>
       </motion.div>
     </>
