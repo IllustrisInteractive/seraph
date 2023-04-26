@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, FunctionComponent } from "react";
+import { useState, useRef, useEffect, FunctionComponent, Ref } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import TextareaAutosize from "react-textarea-autosize";
 import { UserModel } from "../../../core/model/User";
@@ -30,6 +30,8 @@ interface NewPostModalProps {
   toggleModal: Function;
   user: UserModel;
   overrides: any;
+  reloadRef: any;
+  coordinates: [number, number];
 }
 
 const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
@@ -62,10 +64,7 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
         title: reportTitleRef.current?.value,
         content: reportContentRef.current.value,
         category: category,
-        location: new GeoPoint(
-          props.user.currentLocation[0],
-          props.user.currentLocation[1]
-        ),
+        location: new GeoPoint(...props.coordinates),
         timestamp: Date.now(),
         media: filesSelected ? true : false,
       };
@@ -127,6 +126,7 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
                     props.toggleModal();
                   });
                 } else {
+                  props.reloadRef.current();
                   props.toggleModal();
                 }
               });
@@ -390,8 +390,7 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
           <motion.div className="flex flex-col mb-4">
             <p className="text-sm">Location Data</p>
             <p className="font-normal">
-              Lat: {props.user.currentLocation[0]}, Lat:{" "}
-              {props.user.currentLocation[1]}
+              Lat: {props.coordinates[0]}, Lat: {props.coordinates[1]}
             </p>
           </motion.div>
           <AnimatePresence>

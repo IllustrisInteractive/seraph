@@ -68,6 +68,7 @@ import {
   getStorage,
   listAll,
   ref,
+  uploadBytes,
 } from "firebase/storage";
 
 interface props {
@@ -83,6 +84,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
   const [ready, setReady] = useState(false);
   const [location, setLocation] = useState();
   const [posts, setPostsParent] = useState<DocumentSnapshot[]>();
+  const [mapPopUp, setMapPopUp] = useState(false);
   const [userPopupState, setUserPopup] = useState(false);
   const [profile, setProfile] = useState(false);
   const [radius, setRadius] = useState(5);
@@ -100,6 +102,8 @@ export const MainUX: FunctionComponent<props> = (props) => {
   });
 
   const [map, setMap] = useState(null);
+
+  const reloadRef = useRef();
 
   const center = coordinates
     ? {
@@ -130,8 +134,15 @@ export const MainUX: FunctionComponent<props> = (props) => {
         className="flex flex-col absolute top-8 right-0 bg-white w-56 shadow-lg rounded-lg overflow-hidden"
       >
         <div className="bg-gray-400 w-full h-20 max-h-24 items-center space-x-2 flex flex-row">
-          <div className="bg-black h-full w-1/3">
-            {/** Profile picture placeholder */}
+          <div className="bg-transparent border-black-1 h-full w-1/3">
+            {props.user.profilePicture ? (
+              <img
+                src={props.user.profilePicture}
+                className="h-full w-auto object-cover"
+              />
+            ) : (
+              <img src="user.svg" className="h-full w-auto object-cover" />
+            )}
           </div>
           <div className="flex flex-col text-white pr-2">
             <p className="text-xs font-light">Logged in as</p>
@@ -144,17 +155,14 @@ export const MainUX: FunctionComponent<props> = (props) => {
           </div>
         </div>
         <div className="flex flex-col space-y-4 px-2 py-2">
-          <button className="rounded-lg w-full text-left py-2 px-4 hover:bg-gray-300 transition flex flex-row space-x-2 items-center font-bold">
+          <button
+            onClick={() => {
+              setProfile(true);
+            }}
+            className="rounded-lg w-full text-left py-2 px-4 hover:bg-gray-300 transition flex flex-row space-x-2 items-center font-bold"
+          >
             <img className="p-1 rounded-full bg-gray-200" src="/user.svg" />
             <p>Your Profile</p>
-          </button>
-          <button className="rounded-lg w-full text-left py-2 px-4 hover:bg-gray-300 transition flex flex-row space-x-2 items-center font-bold">
-            <img className="p-1 rounded-full bg-gray-200" src="/user.svg" />
-            <p>Settings</p>
-          </button>
-          <button className="rounded-lg w-full text-left py-2 px-4 hover:bg-gray-300 transition flex flex-row space-x-2 items-center font-bold">
-            <img className="p-1 rounded-full bg-gray-200" src="/user.svg" />
-            <p>Feedback & Report</p>
           </button>
           <button
             className="rounded-lg w-full text-left py-2 px-4 hover:bg-gray-300 transition flex flex-row space-x-2 items-center font-bold"
@@ -338,13 +346,24 @@ export const MainUX: FunctionComponent<props> = (props) => {
       layout="position"
     >
       <AnimatePresence>
+        {mapPopUp && (
+          <MapFullScreenPopUp
+            posts={posts}
+            coordinates={coordinates}
+            setMapPopUp={setMapPopUp}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
         {profile && <Profile user={props.user} setProfile={setProfile} />}
 
-        {newPostModal && (
+        {newPostModal && coordinates && (
           <NewPostModal
+            coordinates={coordinates}
             toggleModal={toggleModal}
             user={props.user}
             overrides={newPostModalOverrides}
+            reloadRef={reloadRef}
           />
         )}
       </AnimatePresence>
@@ -381,7 +400,12 @@ export const MainUX: FunctionComponent<props> = (props) => {
               <img src="home.svg" className="h-7 w-auto" />
               <p>Home</p>
             </button>
-            <button className="flex flex-row space-x-6 items-center py-4 bg-transparent hover:bg-slate-100 -ml-8 pl-8 rounded-full">
+            <button
+              onClick={() => {
+                setMapPopUp(true);
+              }}
+              className="flex flex-row space-x-6 items-center py-4 bg-transparent hover:bg-slate-100 -ml-8 pl-8 rounded-full"
+            >
               <img src="map.svg" className="h-7 w-auto" />
               <p>Live Map</p>
             </button>
@@ -515,6 +539,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
                 setNewPostModalOverrides={setNewPostModalOverrides}
                 setNewPostModal={setNewPostModal}
                 radius={radius}
+                reloadRef={reloadRef}
               />
             </>
           )}
@@ -552,7 +577,11 @@ export const MainUX: FunctionComponent<props> = (props) => {
               </>
             )}
           </div>
-          <div className="h-1/2 w-full rounded-lg bg-white relative overflow-hidden shadow-inner z-20">
+          <motion.div
+            className="h-1/2 w-full rounded-lg bg-white relative overflow-hidden shadow-inner z-20"
+            layout
+            layoutId="map"
+          >
             {isLoaded && (
               <GoogleMap
                 mapContainerClassName="h-full w-full"
@@ -564,6 +593,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
                 {posts?.map((doc) => {
                   return (
                     <MarkerF
+                      key={doc.id}
                       label={doc.data()!.title}
                       position={
                         new google.maps.LatLng(
@@ -580,7 +610,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
               There are <span className="font-bold">{posts?.length}</span>{" "}
               reports in your area
             </div>
-          </div>
+          </motion.div>
         </div>
       </motion.div>
     </motion.div>
@@ -588,7 +618,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
 };
 
 const Profile = (props: { user: UserModel; setProfile: Function }) => {
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(true);
   const [profileURL, setProfile] = useState<string>();
   const [profilePicture, setProfilePicture] = useState<File>();
   const [f_name, setFName] = useState<string>();
@@ -596,25 +626,11 @@ const Profile = (props: { user: UserModel; setProfile: Function }) => {
   const profileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (props.user.profilePicture) {
-      let profileRef = ref(
-        getStorage(),
-        props.user.authUser?.uid + "/" + props.user.profilePicture
-      );
-      getDownloadURL(profileRef).then((url) => {
-        setProfile(url);
-        setReady(true);
-      });
-    } else {
-      setReady(true);
+      setProfile(props.user.profilePicture);
     }
+    setFName(props.user._fName);
+    setLName(props.user._lName);
   }, []);
-
-  useEffect(() => {
-    if (ready) {
-      setFName(props.user._fName);
-      setLName(props.user._lName);
-    }
-  }, [ready]);
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -643,7 +659,7 @@ const Profile = (props: { user: UserModel; setProfile: Function }) => {
         <AnimatePresence>
           {ready ? (
             <>
-              <div className="h-48 w-48 grow-0 bg-black rounded-full self-center relative overflow-hidden group">
+              <div className="h-48 w-48 grow-0 rounded-full self-center relative overflow-hidden group">
                 <input
                   type="file"
                   className="hidden"
@@ -663,13 +679,19 @@ const Profile = (props: { user: UserModel; setProfile: Function }) => {
                 >
                   Update Picture
                 </button>
-                {profileURL && (
-                  <img src={profileURL} className="h-full w-auto" />
+                {profileURL && !profilePicture && (
+                  <img
+                    src={profileURL}
+                    className="h-full w-auto object-cover"
+                  />
                 )}
-                {!profileURL && profilePicture && (
+                {!profileURL && !profilePicture && (
+                  <img src="user.svg" className="h-full w-auto object-cover" />
+                )}
+                {profilePicture && (
                   <img
                     src={URL.createObjectURL(profilePicture)}
-                    className="h-full w-full"
+                    className="h-full w-auto object-cover"
                   />
                 )}
               </div>
@@ -788,7 +810,49 @@ const Profile = (props: { user: UserModel; setProfile: Function }) => {
                   </div>
                 </div>
                 <div className="col-span-3 row-span-1 grid grid-cols-2 space-x-4">
-                  <button className="text-white font-bold rounded-lg drop-shadow bg-blue-600">
+                  <button
+                    onClick={() => {
+                      if (profilePicture) {
+                        let newProfilePicture = ref(
+                          getStorage(),
+                          props.user.authUser?.uid + "/" + profilePicture.name
+                        );
+                        uploadBytes(newProfilePicture, profilePicture).then(
+                          (result) => {
+                            if (result) {
+                              updateDoc(
+                                doc(
+                                  getFirestore(),
+                                  "users/" + props.user.authUser?.uid
+                                ),
+                                {
+                                  f_name: f_name,
+                                  l_name: l_name,
+                                  profile_picture: result.ref.name,
+                                }
+                              ).then(() => {
+                                window.location.reload();
+                              });
+                            }
+                          }
+                        );
+                      } else {
+                        updateDoc(
+                          doc(
+                            getFirestore(),
+                            "users/" + props.user.authUser?.uid
+                          ),
+                          {
+                            f_name: f_name,
+                            l_name: l_name,
+                          }
+                        ).then(() => {
+                          window.location.reload();
+                        });
+                      }
+                    }}
+                    className="text-white font-bold rounded-lg drop-shadow bg-blue-600"
+                  >
                     Save Changes
                   </button>
                   <button
@@ -830,12 +894,6 @@ const FeedManager = (props: any) => {
       reload();
     }
   }, [props.coordinates, props.categoryFilter]);
-
-  useEffect(() => {
-    posts?.forEach((post) => {
-      console.log(post.data());
-    });
-  }, [posts]);
 
   const reload = () => {
     setLoading(true);
@@ -899,6 +957,10 @@ const FeedManager = (props: any) => {
         props.setPostsParent(matchingDocs);
       });
   };
+
+  useEffect(() => {
+    props.reloadRef.current = reload;
+  }, []);
 
   return (
     <motion.div className="overflow-y-scroll h-0 grow flex flex-col items-center no-scrollbar">
@@ -1008,6 +1070,7 @@ const Post = (props: any) => {
   const [distance, setDistance] = useState<string>();
   const [upvotes, setUpvotes] = useState(0);
   const [downvotes, setDownvotes] = useState(0);
+  const [ownerProfilePicture, setProfilePicture] = useState<string | null>();
 
   const shareRef = useRef<HTMLInputElement>(null);
   const commentRef = useRef<any>();
@@ -1091,7 +1154,20 @@ const Post = (props: any) => {
       } else {
         setVote("none");
       }
-      setOwner(userDoc);
+
+      if (userDoc && userDoc["profile_picture"]) {
+        getDownloadURL(
+          ref(
+            getStorage(),
+            props.data.owner_uid + "/" + userDoc["profile_picture"]
+          )
+        ).then((url) => {
+          setProfilePicture(url);
+          setOwner(userDoc);
+        });
+      } else if (userDoc) {
+        setOwner(userDoc);
+      }
     });
 
     if (props.data["media"]) {
@@ -1129,6 +1205,14 @@ const Post = (props: any) => {
       updateDoc(doc(getFirestore(), "posts/" + props.id), {
         upvotes: arrayRemove(props.currentUser_uid),
       });
+    } else if (voteState == "downvote") {
+      setUpvotes(upvotes + 1);
+      setDownvotes(downvotes - 1);
+      setVote("upvote");
+      updateDoc(doc(getFirestore(), "posts/" + props.id), {
+        downvotes: arrayRemove(props.currentUser_uid),
+        upvotes: arrayUnion(props.currentUser_uid),
+      });
     } else {
       setUpvotes(upvotes + 1);
       setVote("upvote");
@@ -1146,6 +1230,14 @@ const Post = (props: any) => {
         downvotes: arrayRemove(props.currentUser_uid),
       });
       setVote("none");
+    } else if (voteState == "upvote") {
+      setDownvotes(downvotes + 1);
+      setUpvotes(upvotes - 1);
+      updateDoc(doc(getFirestore(), "posts/" + props.id), {
+        upvotes: arrayRemove(props.currentUser_uid),
+        downvotes: arrayUnion(props.currentUser_uid),
+      });
+      setVote("downvote");
     } else {
       setDownvotes(downvotes + 1);
       updateDoc(doc(getFirestore(), "posts/" + props.id), {
@@ -1194,8 +1286,18 @@ const Post = (props: any) => {
                 </button>
               </div>
             )}
-            <div className="h-9 w-9 rounded-full bg-black">
-              {/** Profile picture placeholder */}
+            <div className="h-9 w-9 rounded-full">
+              {ownerProfilePicture ? (
+                <img
+                  src={ownerProfilePicture}
+                  className="h-full w-auto object-cover"
+                />
+              ) : (
+                <img
+                  src="user.svg"
+                  className="p-1 h-full w-auto object-cover"
+                />
+              )}
             </div>
             <div className="flex flex-col h-9 grow">
               <p className="font-bold text-sm">
@@ -1365,6 +1467,86 @@ const CommentUser = (props: any) => {
         </p>
       )}
     </>
+  );
+};
+
+const MapFullScreenPopUp = (props: any) => {
+  const { isLoaded } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: "AIzaSyA9cJAWTnuOvfK3w_S22YKTkgVYTTbhfzw",
+  });
+
+  const [map, setMap] = useState(null);
+  const onLoad = useCallback(function callback(map: any) {
+    // This is just an example of getting and using the map instance!!! don't just blindly copy!
+    const bounds = new window.google.maps.LatLngBounds(
+      new google.maps.LatLng({
+        lat: props.coordinates[0],
+        lng: props.coordinates[1],
+      })
+    );
+    map.fitBounds(bounds);
+
+    setMap(map);
+  }, []);
+
+  const onUnmount = useCallback(function callback(map: any) {
+    setMap(null);
+  }, []);
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.5, ease: "easeInOut" }}
+      className="h-full w-full p-32 fixed top-0 left-0 bg-black bg-opacity-20 z-50"
+    >
+      <button
+        onClick={() => {
+          props.setMapPopUp(false);
+        }}
+        className="fixed top-12 right-16 bg-white p-4 flex justify-center items-center rounded-full"
+      >
+        <img src="close.svg" className="" />
+      </button>
+
+      <motion.div
+        className="h-full w-full rounded-lg bg-white relative overflow-hidden shadow-inner z-60"
+        layoutId="map"
+      >
+        {isLoaded && props.posts && props.coordinates && (
+          <GoogleMap
+            mapContainerClassName="h-full w-full"
+            center={{
+              lat: props.coordinates[0],
+              lng: props.coordinates[1],
+            }}
+            zoom={10}
+            onLoad={onLoad}
+            onUnmount={onUnmount}
+          >
+            {props.posts.map((doc: any) => {
+              return (
+                <MarkerF
+                  key={doc.id}
+                  label={doc.data()!.title}
+                  position={
+                    new google.maps.LatLng(
+                      doc.data()!.location["_lat"],
+                      doc.data()!.location["_long"]
+                    )
+                  }
+                />
+              );
+            })}
+          </GoogleMap>
+        )}
+        <div className="absolute bottom-0 bg-gradient-to-t text-xl from-gray-700 to-transparent p-8 text-white font-light w-full">
+          There are <span className="font-bold">{props.posts?.length}</span>{" "}
+          reports in your area
+        </div>
+      </motion.div>
+    </motion.div>
   );
 };
 

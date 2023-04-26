@@ -6,6 +6,7 @@ import {
 } from "../firebase/Firestore";
 import { where } from "firebase/firestore";
 import { ImageAsset, StorageController } from "../firebase/Storage";
+import { getDownloadURL, getStorage, ref } from "firebase/storage";
 
 export class UserModel {
   _fName: string | undefined = undefined;
@@ -25,9 +26,9 @@ export class UserModel {
     else return this.dateOfBirth;
   }
 
-  private _profilePicture: ImageAsset | undefined = undefined;
-  public get profilePicture(): ImageAsset | undefined {
-    if (!this._profilePicture) return undefined;
+  private _profilePicture: string | undefined = undefined;
+  public get profilePicture(): string | undefined {
+    if (this._profilePicture) return this._profilePicture;
     else return undefined;
   }
 
@@ -75,14 +76,16 @@ export class UserModel {
         this._authUser = user;
         let storageController = new StorageController();
         if (userDoc["profile_picture"]) {
-          (async () => {
-            this._profilePicture = await storageController.downloadImageAsset(
-              userDoc["profile_picture"]
-            );
+          let profilePictureRef = ref(
+            getStorage(),
+            this._authUser.uid + "/" + userDoc["profile_picture"]
+          );
+          getDownloadURL(profilePictureRef).then((url) => {
+            this._profilePicture = url;
             modelReturnFunction(this);
-          })();
+          });
         } else {
-          this._profilePicture = new ImageAsset("default_picture.png");
+          this._profilePicture = undefined;
           modelReturnFunction(this);
         }
       } else {
