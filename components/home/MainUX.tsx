@@ -91,6 +91,10 @@ export const MainUX: FunctionComponent<props> = (props) => {
   const [categoryFilter, setFilter] = useState<
     "incident" | "accident" | "hazard" | "crime" | undefined
   >();
+  const [searchQuery, setQuery] = useState<string | undefined>(undefined);
+  const [queryDocs, setQueryDocs] =
+    useState<QueryDocumentSnapshot<DocumentData>[]>();
+  const [queryLoading, setQueryLoading] = useState(false);
 
   let geocoder: Geocoder;
   let queryController: FirestoreQueryController;
@@ -170,7 +174,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
               props.authManager?.signOut();
             }}
           >
-            <img className="p-1 rounded-full bg-gray-200" src="/user.svg" />
+            <img className="p-1 rounded-full bg-gray-200" src="/leave.svg" />
             <p>Sign out</p>
           </button>
         </div>
@@ -219,6 +223,29 @@ export const MainUX: FunctionComponent<props> = (props) => {
   const toggleModal = () => {
     setNewPostModal(!newPostModal);
   };
+
+  useEffect(() => {
+    if (searchQuery && searchQuery != "") {
+      setQueryLoading(true);
+    }
+    const queryDebounce = setTimeout(() => {
+      if (searchQuery && searchQuery != "") {
+        getDocs(collection(getFirestore(), "posts")).then((docs) => {
+          let matchingDocs: QueryDocumentSnapshot<DocumentData>[] = [];
+          docs.forEach((doc) => {
+            if (doc.data().title.includes(searchQuery)) {
+              matchingDocs.push(doc);
+            } else if (doc.data().content.includes(searchQuery)) {
+              matchingDocs.push(doc);
+            }
+          });
+          setQueryDocs(matchingDocs);
+          setQueryLoading(false);
+        });
+      }
+    }, 2000);
+    return () => clearTimeout(queryDebounce);
+  }, [searchQuery]);
 
   useEffect(() => {
     if (coordinates && ready) {
@@ -335,6 +362,36 @@ export const MainUX: FunctionComponent<props> = (props) => {
     );
   };
 
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case "hazard":
+        return "bg-orange-400 text-white";
+      case "accident":
+        return "bg-yellow-300 text-black";
+      case "incident":
+        return "bg-black text-white";
+      case "crime":
+        return "bg-red-400 text-white";
+      default:
+        break;
+    }
+  };
+
+  const getCategoryName = (category: string) => {
+    switch (category) {
+      case "hazard":
+        return "Hazard";
+      case "accident":
+        return "Accident";
+      case "incident":
+        return "Incident";
+      case "crime":
+        return "Crime";
+      default:
+        break;
+    }
+  };
+
   return (
     <motion.div
       className="flex flex-col grow w-full h-full bg-slate-200"
@@ -373,8 +430,68 @@ export const MainUX: FunctionComponent<props> = (props) => {
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: "easeInOut" }}
       >
-        <p className="font-bold col-span-1 text-xl text-white">SERAPH</p>
-        <div className="py-2 px-4 col-span-3 text-transparent">Search</div>
+        <p className="font-bold col-span-1 h-12 text-white">
+          <img src="vercel.svg" className="h-12 w-auto" />
+        </p>
+        <div className="relative col-span-3">
+          <div className="py-2 px-4 text-white bg-gray-400 rounded-lg relative">
+            <input
+              type="text"
+              placeholder="Search"
+              className="bg-transparent w-full text-white appearance-none outline-none"
+              onChange={(e) => {
+                setQuery(e.target.value);
+              }}
+            />
+            {!searchQuery && (
+              <div className="absolute top-2 pointer-events-none">Search</div>
+            )}
+          </div>
+          {searchQuery != "" && (
+            <div className="bg-white absolute rounded-lg drop-shadow-lg overflow-hidden flex flex-col w-full">
+              {queryLoading ? (
+                <p className="p-4">Now searching for posts...</p>
+              ) : (
+                <>
+                  {" "}
+                  {queryDocs?.map((query) => {
+                    let post = query.data();
+                    let date = new Date(post.timestamp);
+                    return (
+                      <a
+                        className="bg-white hover:bg-gray-100 p-4 flex flex-row"
+                        href={`/report/${query.id}`}
+                      >
+                        <div className="flex flex-col">
+                          <p className="font-bold">
+                            <span
+                              className={`px-4 py-1 ${getCategoryColor(
+                                post.category
+                              )} text-sm text-white rounded-full`}
+                            >
+                              {getCategoryName(post.category)}
+                            </span>{" "}
+                            {post.title}
+                          </p>
+                          <p className="mt-2">{post.content}</p>
+                          <p className="text-xs text-gray-500">
+                            Uploaded on {date.toString()}
+                          </p>
+                        </div>
+                      </a>
+                    );
+                  })}
+                  {queryDocs?.length == 0 && (
+                    <p className="p-4">
+                      Your query did not return any report with a similar title
+                      or content.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
         <div className="col-span-2 flex flex-row">
           <div className="grow" />
           <div
@@ -759,7 +876,12 @@ const Profile = (props: { user: UserModel; setProfile: Function }) => {
                   <div className="flex flex-row space-x-4">
                     <button
                       onClick={() => {
-                        if (props.user.authUser?.displayName) {
+                        if (
+                          props.user.authUser?.displayName &&
+                          confirm(
+                            "Are you sure you want to delete your SERAPH account? (Including all posts and comments made). This action cannot be undone."
+                          )
+                        ) {
                           reauthenticateWithPopup(
                             props.user.authUser!,
                             new GoogleAuthProvider()
@@ -1039,6 +1161,7 @@ interface MediaContentProps {
 const MediaContent: FunctionComponent<MediaContentProps> = (props) => {
   const [image, setImage] = useState<any>();
   const [video, setVideo] = useState<any>();
+  const [fullscreen, setFullscreen] = useState(false);
 
   const substrings = ["jpg", "png", "webp", "JPG", "PNG", "WEBP"];
   useEffect(() => {
@@ -1050,7 +1173,24 @@ const MediaContent: FunctionComponent<MediaContentProps> = (props) => {
   }, []);
 
   if (image) {
-    return <img src={props.url} className="h-64 w-auto" />;
+    return (
+      <div
+        className="cursor-pointer"
+        onClick={() => {
+          setFullscreen(!fullscreen);
+        }}
+      >
+        <img src={props.url} className="h-full w-full object-contain" />
+        {fullscreen && (
+          <div className="fixed h-screen w-screen p-16 bg-black bg-opacity-40 top-0 left-0 z-50 flex justify-center items-center">
+            <img src={props.url} />
+            <p className="text-white fixed bottom-8">
+              Press anywhere to exit full screen view
+            </p>
+          </div>
+        )}
+      </div>
+    );
   } else if (video) {
     return (
       <video controls className="h-64 w-auto">
@@ -1317,7 +1457,9 @@ const Post = (props: any) => {
             </div>
             <p className="font-bold my-2 text-xl">{props.data.title}</p>
             <p className="leading-tight grow">{props.data.content}</p>
-            <div className="w-full mt-4 flex flex-row flex-wrap">
+            <div
+              className={`w-full mt-4 grid grid-cols-${media?.length} space-x-2 flex-wrap`}
+            >
               {media &&
                 media.map((mediaContent) => {
                   return <MediaContent url={mediaContent} />;

@@ -1,5 +1,11 @@
 import { useRouter } from "next/router";
-import { use, useCallback, useEffect, useState } from "react";
+import {
+  FunctionComponent,
+  use,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import { FirestoreQueryController } from "../../core/firebase/Firestore";
 import {
   DocumentData,
@@ -20,6 +26,7 @@ import {
   MarkerF,
   useJsApiLoader,
 } from "@react-google-maps/api";
+import { getDownloadURL, getStorage, listAll, ref } from "firebase/storage";
 
 const DedicatedReportPage = () => {
   const [comments, setComments] = useState<DocumentSnapshot<DocumentData>[]>(
@@ -39,6 +46,8 @@ const DedicatedReportPage = () => {
   });
 
   const [map, setMap] = useState(null);
+  const [media, setMedia] = useState<string[]>();
+  const [currentMedia, setCurrentMedia] = useState(0);
 
   const center = coordinates
     ? {
@@ -95,12 +104,29 @@ const DedicatedReportPage = () => {
   }, [post_id]);
 
   useEffect(() => {
+    console.log(media);
+  }, [media]);
+
+  useEffect(() => {
     if (post) {
       let controller: FirestoreQueryController = new FirestoreQueryController();
 
       controller.fetch_doc_once(post["owner_uid"], "users", (result) => {
         setOwner(result.data());
       });
+      if (post.media) {
+        const mediaRef = ref(getStorage(), `${post_id}`);
+        listAll(mediaRef).then((list) => {
+          let promises: Promise<string>[] = [];
+          list.items.forEach((item) => {
+            promises.push(getDownloadURL(item));
+          });
+
+          Promise.all(promises).then((urls) => {
+            setMedia(urls);
+          });
+        });
+      }
     }
   }, [post]);
 
@@ -147,11 +173,66 @@ const DedicatedReportPage = () => {
     }
   };
 
+  interface MediaContentProps {
+    url: string;
+  }
+
+  const MediaContent: FunctionComponent<MediaContentProps> = (props) => {
+    const [image, setImage] = useState<any>();
+    const [video, setVideo] = useState<any>();
+
+    const substrings = ["jpg", "png", "webp", "JPG", "PNG", "WEBP"];
+    useEffect(() => {
+      if (substrings.some((v) => props.url.includes(v))) {
+        setImage(true);
+      } else {
+        setVideo(true);
+      }
+    }, []);
+
+    if (image) {
+      return <img src={props.url} className="h-auto w-full object-contain" />;
+    } else if (video) {
+      return (
+        <video controls className="h-auto w-full">
+          <source src={props.url} />
+        </video>
+      );
+    }
+    return <></>;
+  };
+
   return (
     <div className="bg-blue-200 p-16 h-screen w-screen flex flex-col justify-center items-center">
       {owner && location && coordinates && comments ? (
         <div className="bg-gray-50 grow w-full rounded-lg drop-shadow-lg grid grid-cols-2 overflow-hidden">
-          <div className="bg-black" />
+          <div className="bg-black relative flex flex-row group">
+            {media && media.length > 0 && (
+              <>
+                <button
+                  className="absolute left-0 px-8 font-bold text-white bg-black bg-opacity-25 h-full group-hover:block hidden"
+                  onClick={() => {
+                    setCurrentMedia(currentMedia <= 0 ? 0 : currentMedia - 1);
+                  }}
+                >
+                  Prev
+                </button>
+                <MediaContent url={media[currentMedia]} />
+                <button
+                  className="absolute right-0 px-8 font-bold text-white bg-black bg-opacity-25 h-full group-hover:block hidden"
+                  onClick={() => {
+                    setCurrentMedia(
+                      currentMedia == media.length - 1
+                        ? currentMedia
+                        : currentMedia + 1
+                    );
+                  }}
+                >
+                  Next
+                </button>
+              </>
+            )}
+          </div>
           <div className="flex flex-col p-8">
             <div className="py-4 px-8 rounded-lg bg-blue-400 text-white text-lg">
               Help keep your community safe, and more, when you join SERAPH.{" "}
