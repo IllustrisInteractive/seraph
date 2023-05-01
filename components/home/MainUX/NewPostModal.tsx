@@ -106,7 +106,7 @@ const NewPostModal: FunctionComponent<NewPostModalProps> = (props) => {
                   // accuracy, but most will match
                   const distanceInKm = distanceBetween([lat, lng], coordinates);
                   const distanceInM = distanceInKm * 1000;
-                  if (distanceInM <= 50 * 1000) {
+                  if (distanceInM <= 5 * 1000) {
                     document.data()["distance"] = distanceInM;
                     matchingDocs.push(document);
                   }

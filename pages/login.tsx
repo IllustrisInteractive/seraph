@@ -85,7 +85,9 @@ const SignInPage: FunctionComponent = () => {
         exit={{ opacity: 0, scale: 0.75 }}
         transition={{ duration: 1, ease: easeInOut }}
       >
-        <div className="bg-black" />
+        <div className="bg-white flex justify-center items-center">
+          <img src="vercel.svg" className="h-72 w-auto" />
+        </div>
         <motion.div className="bg-white flex flex-col justify-center items-center">
           <motion.h1 className="text-6xl font-bold w-3/4 text-center">
             Help protect your own community today.
