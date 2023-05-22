@@ -11,3 +11,6 @@ SERAPH gives users the power to keep their immediate community safe with a socia
 
 ## Copyright
 Illustris Interactive reserves all copyright for the source code of this project, along with the respective copyright owners of various packages, libraries, and frameworks used.
+
+### Post-script
+SERAPH was made as a term project in February 2023. Initially, I've included text verification and notifications. Because of the limitations of the Twilio platform for free accounts, this feature has been disabled (Users will not be able to add phone numbers, nor receive messages).
