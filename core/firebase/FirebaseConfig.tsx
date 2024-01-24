@@ -1,12 +1,13 @@
 import { initializeApp } from "firebase/app";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBRhKXktJuQPsWMtPp2Ep6r9BIfDgJ9Bp0",
-  authDomain: "seraph-f8751.firebaseapp.com",
-  projectId: "seraph-f8751",
-  storageBucket: "seraph-f8751.appspot.com",
-  messagingSenderId: "722676641961",
-  appId: "1:722676641961:web:736ab461fa9758663f79b8",
+  apiKey: process.env.NEXT_PUBLIC_apiKey,
+  authDomain: process.env.NEXT_PUBLIC_authDomain,
+  projectId: process.env.NEXT_PUBLIC_projectId,
+  storageBucket: process.env.NEXT_PUBLIC_storageBucket,
+  messagingSenderId: process.env.NEXT_PUBLIC_messagingSenderId,
+  appId: process.env.NEXT_PUBLIC_appId,
 };
 
-export const app = initializeApp(firebaseConfig);
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
