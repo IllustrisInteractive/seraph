@@ -1615,7 +1615,7 @@ const CommentUser = (props: any) => {
 const MapFullScreenPopUp = (props: any) => {
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
-    googleMapsApiKey: process.env.NEXT_PUBLIC_mapApiKey,
+    googleMapsApiKey: process.env.NEXT_PUBLIC_mapApiKey || "",
   });
 
   const [map, setMap] = useState(null);
