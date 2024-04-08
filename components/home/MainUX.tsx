@@ -102,7 +102,7 @@ export const MainUX: FunctionComponent<props> = (props) => {
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
-    googleMapsApiKey: "AIzaSyA9cJAWTnuOvfK3w_S22YKTkgVYTTbhfzw",
+    googleMapsApiKey: process.env.NEXT_PUBLIC_mapApiKey || "",
   });
 
   const [map, setMap] = useState(null);
