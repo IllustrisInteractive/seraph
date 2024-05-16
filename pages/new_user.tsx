@@ -34,9 +34,10 @@ const NewUser: NextPage = () => {
   let authManager: AuthenticationManager;
   let queryController: FirestoreQueryController =
     new FirestoreQueryController();
-  let geocoder: Geocoder = new Geocoder(
-    "AIzaSyA9cJAWTnuOvfK3w_S22YKTkgVYTTbhfzw"
+  let geocoder: Geocoder = new Geocoder("AIzaSyAsjtn-_k1HjXgfxM7xcDpkgq8Yv_TcxWc"
   );
+
+  let old_key: string = "AIzaSyA9cJAWTnuOvfK3w_S22YKTkgVYTTbhfzw";
 
   const handleSelect = () => {
     setCityState(true);
