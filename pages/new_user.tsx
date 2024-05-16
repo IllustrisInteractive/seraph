@@ -34,7 +34,7 @@ const NewUser: NextPage = () => {
   let authManager: AuthenticationManager;
   let queryController: FirestoreQueryController =
     new FirestoreQueryController();
-  let geocoder: Geocoder = new Geocoder("AIzaSyAsjtn-_k1HjXgfxM7xcDpkgq8Yv_TcxWc"
+  let geocoder: Geocoder = new Geocoder(process.env.NEXT_PUBLIC_mapApiKey || ""
   );
 
   let old_key: string = "AIzaSyA9cJAWTnuOvfK3w_S22YKTkgVYTTbhfzw";
